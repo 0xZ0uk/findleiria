@@ -1,9 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 24" role="img" aria-label="FindLeiria">
-  <defs>
-    <mask id="core">
-      <rect width="20" height="24" fill="#fff" />
-      <circle cx="10" cy="9.1" r="2.8" fill="#000" />
-    </mask>
-  </defs>
-  <path d="M10 0.8 L19.2 9.5 L10 23.2 L0.8 9.5 Z" fill="#FF8C00" mask="url(#core)" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="FindLeiria">
+  <rect width="24" height="24" rx="7" fill="#1f4a34" />
+  <path d="M12 19.5s-5-4.3-5-8.6a5 5 0 0 1 10 0c0 4.3-5 8.6-5 8.6z" fill="#ffdbe5" />
+  <circle cx="12" cy="10.8" r="1.9" fill="#1f4a34" />
 </svg>

@@ -3,62 +3,32 @@
 
 @source "./**/*.{ts,tsx}";
 
-/* Self-hosted webfonts: latin subset, one variable woff2 per family, served
-   from public/fonts (licence in OFL.txt there). Karla and Schibsted Grotesk
-   are preloaded in index.html; JetBrains Mono (labels) loads on demand. */
+/* Self-hosted webfonts: latin subset, variable woff2, served from public/fonts
+   (licence in OFL.txt there). Inter and upright Fraunces are preloaded in
+   index.html; the italic only sets the accent word in a headline, so it loads
+   on demand. */
 @font-face {
-	font-family: "Schibsted Grotesk";
+	font-family: "Fraunces";
 	font-style: normal;
-	font-weight: 700 800;
+	font-weight: 400 600;
 	font-display: swap;
-	src: url("/fonts/schibsted-grotesk-latin-var.woff2") format("woff2");
-}
-
-@font-face {
-	font-family: "Karla";
-	font-style: normal;
-	font-weight: 400 700;
-	font-display: swap;
-	src: url("/fonts/karla-latin-var.woff2") format("woff2");
+	src: url("/fonts/fraunces-latin-var.woff2") format("woff2");
 }
 
 @font-face {
-	font-family: "JetBrains Mono";
-	font-style: normal;
-	font-weight: 400 700;
+	font-family: "Fraunces";
+	font-style: italic;
+	font-weight: 400 600;
 	font-display: swap;
-	src: url("/fonts/jetbrains-mono-latin-var.woff2") format("woff2");
+	src: url("/fonts/fraunces-italic-latin-var.woff2") format("woff2");
 }
 
-/* Control borders and decorative affordances. A control's own boundary has to
-   clear 3:1 (WCAG 1.4.11): muted-foreground at 60% does in dark (3.4:1 on the
-   card) but only reaches 2.9:1 in light, so light mixes in more ink. */
-:root {
-	--control: rgb(163 163 163 / 0.6);
-}
-
-.light {
-	--control: rgb(82 82 82 / 0.7);
-}
-
-@theme inline {
-	--color-control: var(--control);
-}
-
-/* Porta443: dark is the DEFAULT canvas; the theme toggle adds `.light`
-   (mapped in globals.css). No .dark variant needed. */
-@custom-variant light (&:is(.light *));
-
-/* The one label shape on the page: uppercase mono for captions, counts, chips
-   and field labels. Color is left to the caller so the same shape can be
-   amber when it marks something. */
-@utility micro {
-	font-family: var(--font-mono);
-	font-size: 11px;
-	font-weight: 500;
-	line-height: 1.4;
-	letter-spacing: 0.14em;
-	text-transform: uppercase;
+@font-face {
+	font-family: "Inter";
+	font-style: normal;
+	font-weight: 400 600;
+	font-display: swap;
+	src: url("/fonts/inter-latin-var.woff2") format("woff2");
 }
 
 /* The focus ring, defined once.
@@ -76,6 +46,15 @@
 	}
 }
 
+/* A scroller that keeps its overflow but not its bar: the day strip and the
+   theme chips on a phone, where the cut-off last item is the scroll cue. */
+@utility scrollbar-none {
+	scrollbar-width: none;
+	&::-webkit-scrollbar {
+		display: none;
+	}
+}
+
 /* After a client-side navigation the app moves focus to the new page's heading
    (or <main>) so screen readers announce it; see focusPage in app.tsx. It is a
    landmark, not a control, so it draws no ring. */
@@ -85,17 +64,13 @@ h1[tabindex="-1"]:focus {
 }
 
 @layer base {
-	/* Body carries the color tokens; html carries the overscroll gutter and the
-     native-control scheme (date pickers and selects follow it). */
 	html {
 		background-color: var(--background);
-	}
-
-	html.dark {
-		color-scheme: dark;
-	}
-
-	html.light {
 		color-scheme: light;
+	}
+
+	::selection {
+		background-color: var(--primary-surface);
+		color: var(--foreground);
 	}
 }

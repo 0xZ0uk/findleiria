@@ -1,5 +1,6 @@
 // OG card renderer for FindLeiria prerender.
-// Pure typographic 1200x630 PNG built with satori (SVG) + @resvg/resvg-js (PNG).
+// Typographic 1200x630 PNG built with satori (SVG) + @resvg/resvg-js (PNG):
+// white ground, Fraunces title, pastel discs top right, as the site looks.
 // No JSX: satori accepts a plain object tree of { type, props }.
 
 import fs from "node:fs";
@@ -14,33 +15,64 @@ const FONT_DIR = path.resolve(SCRIPT_DIR, "..", "assets", "fonts");
 /** Every file that shapes the card; the prerender hashes them into the cache key. */
 export const OG_TEMPLATE_FILES = [
 	fileURLToPath(import.meta.url),
-	path.join(FONT_DIR, "schibsted-grotesk-latin-800-normal.woff"),
-	path.join(FONT_DIR, "karla-latin-600-normal.woff"),
-	path.join(FONT_DIR, "karla-latin-400-normal.woff"),
+	path.join(FONT_DIR, "fraunces-latin-500-normal.woff"),
+	path.join(FONT_DIR, "inter-latin-600-normal.woff"),
+	path.join(FONT_DIR, "inter-latin-400-normal.woff"),
 ];
 
 const fonts = [
 	{
-		name: "SchibstedGrotesk",
+		name: "Fraunces",
 		data: fs.readFileSync(
-			path.join(FONT_DIR, "schibsted-grotesk-latin-800-normal.woff"),
+			path.join(FONT_DIR, "fraunces-latin-500-normal.woff"),
 		),
-		weight: 800,
+		weight: 500,
 		style: "normal",
 	},
 	{
-		name: "Karla",
-		data: fs.readFileSync(path.join(FONT_DIR, "karla-latin-600-normal.woff")),
+		name: "Inter",
+		data: fs.readFileSync(path.join(FONT_DIR, "inter-latin-600-normal.woff")),
 		weight: 600,
 		style: "normal",
 	},
 	{
-		name: "Karla",
-		data: fs.readFileSync(path.join(FONT_DIR, "karla-latin-400-normal.woff")),
+		name: "Inter",
+		data: fs.readFileSync(path.join(FONT_DIR, "inter-latin-400-normal.woff")),
 		weight: 400,
 		style: "normal",
 	},
 ];
+
+/** The site's tokens (packages/ui globals.css), restated: satori reads no CSS. */
+const COLOR = {
+	ground: "#ffffff",
+	ink: "#17221b",
+	inkMuted: "#4f5b54",
+	rule: "#e4e7e2",
+	forest: "#1f4a34",
+	forestTint: "#d8efe0",
+	lilac: "#e7defe",
+	pink: "#ffdbe5",
+	butter: "#fff0b3",
+};
+
+/** A soft pastel disc, part off-canvas, behind the top-right corner. */
+function disc(color, size, top, right) {
+	return {
+		type: "div",
+		props: {
+			style: {
+				position: "absolute",
+				top,
+				right,
+				width: size,
+				height: size,
+				borderRadius: size,
+				backgroundColor: color,
+			},
+		},
+	};
+}
 
 const WIDTH = 1200;
 const HEIGHT = 630;
@@ -74,11 +106,15 @@ export async function renderOgCard({ title, dayLabel, venueLabel }) {
 				display: "flex",
 				flexDirection: "column",
 				justifyContent: "space-between",
-				backgroundColor: "#0a0a0a",
+				backgroundColor: COLOR.ground,
 				padding: "72px 80px 64px 80px",
 				boxSizing: "border-box",
+				position: "relative",
 			},
 			children: [
+				disc(COLOR.butter, 360, -170, -110),
+				disc(COLOR.pink, 260, 80, -150),
+				disc(COLOR.lilac, 200, -90, 190),
 				// Top mark
 				{
 					type: "div",
@@ -89,17 +125,41 @@ export async function renderOgCard({ title, dayLabel, venueLabel }) {
 							alignItems: "center",
 							justifyContent: "space-between",
 							width: "100%",
-							fontFamily: "Karla",
+							fontFamily: "Inter",
 							fontWeight: 400,
 							fontSize: 22,
-							color: "#8b8b8b",
-							letterSpacing: "0.06em",
+							color: COLOR.inkMuted,
 						},
 						children: [
-							{ type: "div", props: { style: {}, children: "findleiria" } },
 							{
 								type: "div",
-								props: { style: {}, children: "findleiria.vercel.app" },
+								props: {
+									style: {
+										display: "flex",
+										fontFamily: "Fraunces",
+										fontWeight: 500,
+										fontSize: 34,
+										color: COLOR.ink,
+										letterSpacing: "-0.02em",
+									},
+									children: [
+										{ type: "span", props: { children: "find" } },
+										{
+											type: "span",
+											props: {
+												style: { color: COLOR.forest },
+												children: "leiria",
+											},
+										},
+									],
+								},
+							},
+							{
+								type: "div",
+								props: {
+									style: { marginRight: 260 },
+									children: "findleiria.vercel.app",
+								},
 							},
 						],
 					},
@@ -121,12 +181,14 @@ export async function renderOgCard({ title, dayLabel, venueLabel }) {
 								type: "div",
 								props: {
 									style: {
-										fontFamily: "SchibstedGrotesk",
-										fontWeight: 800,
-										fontSize,
-										lineHeight: 1.06,
-										color: "#ffffff",
-										maxWidth: "100%",
+										fontFamily: "Fraunces",
+										fontWeight: 500,
+										fontSize: Math.round(fontSize * 1.08),
+										lineHeight: 1.08,
+										letterSpacing: "-0.02em",
+										color: COLOR.ink,
+										// Clear of the pink disc on the right edge.
+										maxWidth: 940,
 										display: "-webkit-box",
 										WebkitBoxOrient: "vertical",
 										WebkitLineClamp: 4,
@@ -150,7 +212,7 @@ export async function renderOgCard({ title, dayLabel, venueLabel }) {
 							alignItems: "center",
 							justifyContent: "space-between",
 							width: "100%",
-							borderTop: "1px solid #232323",
+							borderTop: `2px solid ${COLOR.ink}`,
 							paddingTop: "26px",
 						},
 						children: [
@@ -158,10 +220,14 @@ export async function renderOgCard({ title, dayLabel, venueLabel }) {
 								type: "div",
 								props: {
 									style: {
-										fontFamily: "Karla",
+										display: "flex",
+										fontFamily: "Inter",
 										fontWeight: 600,
 										fontSize: 26,
-										color: "#d9d9d9",
+										color: COLOR.forest,
+										backgroundColor: COLOR.forestTint,
+										borderRadius: 999,
+										padding: day ? "8px 22px" : 0,
 									},
 									children: day,
 								},
@@ -170,10 +236,10 @@ export async function renderOgCard({ title, dayLabel, venueLabel }) {
 								type: "div",
 								props: {
 									style: {
-										fontFamily: "Karla",
+										fontFamily: "Inter",
 										fontWeight: 600,
 										fontSize: 26,
-										color: "#e8b44a",
+										color: COLOR.inkMuted,
 									},
 									children: venue,
 								},

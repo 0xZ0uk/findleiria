@@ -9,10 +9,18 @@ function positions(style: string): [number, number][] {
 	]);
 }
 
+/** The `r, g, b` of each field, in paint order. */
+function fieldColors(style: string): string[] {
+	return [...style.matchAll(/at \d+% \d+%, rgba\((\d+, \d+, \d+), /g)].map(
+		(match) => match[1] ?? "",
+	);
+}
+
 describe("meshGradient", () => {
 	test("is stable for the same seed", () => {
 		const seed = "feira-de-antiguidades-e-velharias-de-leiria-a7b3c7c1a600";
 		expect(meshGradient(seed)).toEqual(meshGradient(seed));
+		expect(meshGradient(seed, "food")).toEqual(meshGradient(seed, "food"));
 	});
 
 	test("gives different events different tiles", () => {
@@ -27,21 +35,28 @@ describe("meshGradient", () => {
 		const tile = meshGradient("");
 		expect(tile.backgroundImage).toContain("radial-gradient");
 		expect(tile.backgroundImage).not.toContain("NaN");
+		expect(tile.backgroundImage).not.toContain("undefined");
 	});
 
-	test("anchors every tile on amber", () => {
+	test("anchors the tile on the event's theme", () => {
 		for (const seed of ["a", "magusto-rock", "trail-do-chicharo", ""]) {
-			expect(meshGradient(seed).backgroundImage).toContain("rgba(255, 140, 0");
+			expect(fieldColors(meshGradient(seed, "music").backgroundImage)[0]).toBe(
+				"201, 184, 255",
+			);
+			expect(fieldColors(meshGradient(seed, "food").backgroundImage)[0]).toBe(
+				"255, 201, 163",
+			);
 		}
 	});
 
-	test("emits five fields, all inside the tile", () => {
+	test("emits three fields in three different pastels, all inside the tile", () => {
 		const { backgroundImage } = meshGradient(
 			"ding-ding-dong-sons-com-sabor-a-natal",
 		);
-		expect(backgroundImage.match(/radial-gradient\(/g)?.length).toBe(5);
+		expect(backgroundImage.match(/radial-gradient\(/g)?.length).toBe(3);
+		expect(new Set(fieldColors(backgroundImage)).size).toBe(3);
 		const points = positions(backgroundImage);
-		expect(points).toHaveLength(5);
+		expect(points).toHaveLength(3);
 		for (const [x, y] of points) {
 			expect(x).toBeGreaterThanOrEqual(0);
 			expect(x).toBeLessThanOrEqual(100);
@@ -50,40 +65,18 @@ describe("meshGradient", () => {
 		}
 	});
 
-	// Amber owns 10–70° on the wheel. A seed landing in that band is rotated to
-	// the cool side, so every tile mixes a counterweight against the amber field
-	// instead of stacking three warm ones.
-	test("never lets the ground hue sit inside amber's band", () => {
-		for (const seed of ["a", "b", "c", "d", "e", "f", "g", "estiagem"]) {
-			const hue = Number(
-				meshGradient(seed).backgroundColor.match(/^hsl\((\d+)/)?.[1],
-			);
-			expect(hue < 10 || hue > 70).toBe(true);
-		}
-	});
-
-	test("carries a ground so an image never lands on nothing", () => {
-		expect(meshGradient("sabados-com-contos").backgroundColor).toMatch(
-			/^hsl\(\d+ 48% 17%\)$/,
-		);
-	});
-
-	// Near-opposite hues crossing mid-tile is what produced the grey-brown wash
-	// that made early tiles look like faded photos. Keep the pair analogous.
-	test("keeps the two hues analogous", () => {
-		for (const seed of ["a", "b", "c", "trail-do-chicharo", "estiagem"]) {
-			const hues = [
-				...new Set(
-					[...meshGradient(seed).backgroundImage.matchAll(/hsla\((\d+) /g)].map(
-						(match) => Number(match[1]),
-					),
-				),
-			];
-			expect(hues).toHaveLength(2);
-			const gap = Math.abs(hues[0] - hues[1]);
-			const circular = Math.min(gap, 360 - gap);
-			expect(circular).toBeGreaterThanOrEqual(60);
-			expect(circular).toBeLessThanOrEqual(120);
+	// A dark ground is what turned uncovered corners muddy; the tile stays in
+	// the light family of its anchor.
+	test("carries a light ground so an image never lands on nothing", () => {
+		for (const seed of ["sabados-com-contos", "estiagem", ""]) {
+			const channels = meshGradient(seed)
+				.backgroundColor.match(/^rgb\((\d+), (\d+), (\d+)\)$/)
+				?.slice(1)
+				.map(Number);
+			expect(channels).toHaveLength(3);
+			for (const channel of channels ?? []) {
+				expect(channel).toBeGreaterThanOrEqual(230);
+			}
 		}
 	});
 });

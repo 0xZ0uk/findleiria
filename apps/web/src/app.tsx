@@ -67,9 +67,11 @@ function AgendaShell() {
 
 	return (
 		<div className="min-h-svh">
-			<main className={SHELL}>
+			<main>
 				<AgendaPage agenda={agenda} />
-				<Announcements agenda={agenda} />
+				<div className={SHELL}>
+					<Announcements agenda={agenda} />
+				</div>
 			</main>
 			<div className={SHELL}>
 				<PageFooter />

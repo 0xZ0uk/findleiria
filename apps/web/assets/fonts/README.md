@@ -1,14 +1,14 @@
 # Fonts
 
 Vendored only for the OG share cards that `scripts/og-card.mjs` rasterises at
-build time. The site itself still loads its webfonts the normal way — nothing
+build time. The site itself loads its webfonts from `public/fonts` — nothing
 here ships to the browser.
 
 | File | Family | Source |
 | --- | --- | --- |
-| `schibsted-grotesk-latin-800-normal.woff` | Schibsted Grotesk 800 | Google Fonts |
-| `karla-latin-400-normal.woff` | Karla 400 | Google Fonts |
-| `karla-latin-600-normal.woff` | Karla 600 | Google Fonts |
+| `fraunces-latin-500-normal.woff` | Fraunces 500 | Google Fonts, via Fontsource |
+| `inter-latin-400-normal.woff` | Inter 400 | Google Fonts, via Fontsource |
+| `inter-latin-600-normal.woff` | Inter 600 | Google Fonts, via Fontsource |
 
 Both families are licensed under the SIL Open Font License 1.1, which permits
 redistribution and embedding: <https://openfontlicense.org>.

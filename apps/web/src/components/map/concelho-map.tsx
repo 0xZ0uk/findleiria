@@ -42,10 +42,10 @@ type Palette = {
 };
 
 /**
- * The theme lives in CSS custom properties, and the map is the one surface that
- * is not HTML — so read the tokens rather than restate the hex codes here. A
- * probe element resolves `var()` chains for us, which is what makes `.light`
- * (and any future token edit) reach the map for free.
+ * The palette lives in CSS custom properties, and the map is the one surface
+ * that is not HTML — so read the tokens rather than restate the hex codes here.
+ * A probe element resolves `var()` chains for us, which is what makes a token
+ * edit reach the map for free.
  */
 function readToken(token: string, fallback: string): string {
 	if (typeof document === "undefined") return fallback;
@@ -61,27 +61,17 @@ function readToken(token: string, fallback: string): string {
 
 function readPalette(): Palette {
 	return {
-		heat: readToken("--p443-primary", "#ff8c00"),
-		line: readToken("--border", "#2a2a2a"),
-		ink: readToken("--foreground", "#e5e5e5"),
-		quiet: readToken("--muted-foreground", "#a3a3a3"),
-		surface: readToken("--background", "#0b0b0b"),
+		heat: readToken("--primary", "#1f4a34"),
+		line: readToken("--border", "#e4e7e2"),
+		ink: readToken("--foreground", "#17221b"),
+		quiet: readToken("--muted-foreground", "#4f5b54"),
+		surface: readToken("--background", "#ffffff"),
 	};
 }
 
-/** Recolour when the theme flips (the `.dark` / `.light` class swaps the tokens). */
+/** Read once: there is one theme, so the tokens never change under the map. */
 function usePalette(): Palette {
-	const [palette, setPalette] = useState<Palette>(readPalette);
-	useEffect(() => {
-		const observer = new MutationObserver(() => setPalette(readPalette()));
-		const options: MutationObserverInit = {
-			attributes: true,
-			attributeFilter: ["class"],
-		};
-		observer.observe(document.documentElement, options);
-		observer.observe(document.body, options);
-		return () => observer.disconnect();
-	}, []);
+	const [palette] = useState<Palette>(readPalette);
 	return palette;
 }
 
@@ -428,7 +418,7 @@ export default function ConcelhoMap({
 		};
 	}, [pins, selectedVenue, palette, mounted]);
 
-	// Paint: heat by count, amber solid for the pick, and each tooltip's number.
+	// Paint: heat by count, solid green for the pick, and each tooltip's number.
 	useEffect(() => {
 		for (const [name, path] of paths.current) {
 			const count = counts.get(name) ?? 0;

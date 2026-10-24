@@ -1,22 +1,21 @@
 /* ============================================================
    Concelho map (SLICE_14). Scoped to the map view, and loaded
    with it: Leaflet ships its own stylesheet, and these are the
-   overrides that make its chrome speak Porta443 — surface,
-   hairline, ink, amber on hover, sharp corners.
+   overrides that make its chrome match the page — surface,
+   hairline, ink, green on hover, soft corners.
    ============================================================ */
 
 .concelho-map.leaflet-container {
 	background: transparent;
-	font-family: var(--p443-font-body);
+	font-family: var(--font-sans);
 	/* The district is the only thing on the canvas: an outline on focus, never
-	   a box shadow, and never the amber (that means "activity"). */
+	   a box shadow, and never the primary green (that means "activity"). */
 	outline-offset: -2px;
 }
 
 .concelho-map .leaflet-interactive {
 	cursor: pointer;
-	/* Stroke and fill transitions follow the palette observer, so a theme flip
-	   fades rather than snaps. */
+	/* Hover and selection fade rather than snap. */
 	transition:
 		fill-opacity 160ms ease,
 		stroke-width 160ms ease;
@@ -51,16 +50,16 @@
 
 .concelho-map .concelho-label__name {
 	display: block;
-	font-family: var(--p443-font-display);
-	font-size: 12px;
-	font-weight: 700;
+	font-family: var(--font-serif);
+	font-size: 13px;
+	font-weight: 600;
 	letter-spacing: -0.01em;
 	color: var(--foreground);
 }
 
 .concelho-map .concelho-label__count {
 	display: block;
-	font-family: var(--p443-font-mono);
+	font-family: var(--font-sans);
 	font-size: 11px;
 	font-variant-numeric: tabular-nums;
 	color: var(--muted-foreground);
@@ -70,7 +69,7 @@
 .concelho-map .pin-label {
 	background: var(--card);
 	border: 1px solid var(--border);
-	border-radius: var(--p443-r-sm);
+	border-radius: 8px;
 	box-shadow: none;
 	padding: 2px 6px;
 	white-space: nowrap;
@@ -84,15 +83,15 @@
 
 .concelho-map .pin-label__name {
 	display: block;
-	font-family: var(--p443-font-display);
-	font-size: 12px;
-	font-weight: 700;
+	font-family: var(--font-serif);
+	font-size: 13px;
+	font-weight: 600;
 	letter-spacing: -0.01em;
 }
 
 .concelho-map .pin-label__meta {
 	display: block;
-	font-family: var(--p443-font-mono);
+	font-family: var(--font-sans);
 	font-size: 10px;
 	font-variant-numeric: tabular-nums;
 	color: var(--muted-foreground);
@@ -101,7 +100,7 @@
 /* ── Chrome: zoom, attribution ── */
 .concelho-map .leaflet-bar {
 	border: 1px solid var(--border);
-	border-radius: var(--p443-r-sm);
+	border-radius: 8px;
 	overflow: hidden;
 	box-shadow: none;
 }
@@ -114,12 +113,12 @@
 	width: 30px;
 	height: 30px;
 	line-height: 28px;
-	font-family: var(--p443-font-mono);
+	font-family: var(--font-sans);
 	font-size: 16px;
 }
 
 .concelho-map .leaflet-bar a:hover {
-	color: var(--p443-primary);
+	color: var(--primary);
 }
 
 .concelho-map .leaflet-bar a:last-child {
@@ -135,7 +134,7 @@
 .concelho-map .leaflet-control-attribution {
 	background: color-mix(in srgb, var(--background) 82%, transparent);
 	color: var(--muted-foreground);
-	font-family: var(--p443-font-mono);
+	font-family: var(--font-sans);
 	font-size: 10px;
 	padding: 1px 4px;
 }
@@ -147,5 +146,5 @@
 }
 
 .concelho-map .leaflet-control-attribution a:hover {
-	color: var(--p443-primary);
+	color: var(--primary);
 }

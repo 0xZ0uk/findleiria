@@ -10,18 +10,18 @@ const badgeVariants = cva(
 			variant: {
 				/* Status chip: dark surface + muted ink (DESIGN.md status-chip) */
 				default:
-					"border border-[var(--p443-hairline)] bg-[var(--p443-surface)] text-[var(--p443-ink-muted)]",
+					"border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
 				secondary:
-					"border border-[var(--p443-hairline)] bg-[var(--p443-surface)] text-[var(--p443-ink-muted)]",
+					"border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
 				/* Amber reserved — use sparingly (one per view) */
-				blue: "bg-[var(--p443-primary)] text-[var(--p443-on-primary)]",
+				blue: "bg-[var(--primary)] text-[var(--primary-foreground)]",
 				pinkish: "bg-destructive/15 text-destructive",
 				salmon:
-					"border border-[var(--p443-hairline)] bg-[var(--p443-surface)] text-[var(--p443-ink-muted)]",
+					"border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
 				students:
-					"border border-[var(--p443-hairline)] bg-[var(--p443-surface)] text-[var(--p443-ink-muted)]",
+					"border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
 				outline:
-					"border-[var(--p443-hairline)] bg-transparent text-[var(--p443-ink-muted)]",
+					"border-[var(--border)] bg-transparent text-[var(--muted-foreground)]",
 				ghost: "hover:bg-muted hover:text-muted-foreground",
 				destructive:
 					"bg-destructive/10 text-destructive focus-visible:ring-destructive/20",

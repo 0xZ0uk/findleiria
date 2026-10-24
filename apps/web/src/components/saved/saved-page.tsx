@@ -2,7 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { EventRow } from "@/components/agenda/event-row";
 import { PageFooter } from "@/components/agenda/footer";
-import { MICRO, SHELL } from "@/components/agenda/layout";
+import {
+	BUTTON,
+	CAPTION,
+	PRIMARY_BUTTON,
+	SHELL,
+} from "@/components/agenda/layout";
 import { AgendaError } from "@/components/agenda/states";
 import { SaveButton } from "@/components/saved/save-button";
 import { useSavedStore } from "@/components/saved/saved-context";
@@ -18,8 +23,8 @@ function SavedSkeleton() {
 		<ul className="mt-8" aria-hidden="true">
 			{["a", "b", "c"].map((key) => (
 				<li key={key} className="border-border border-b py-6 last:border-b-0">
-					<div className="h-4 w-2/3 rounded-[2px] bg-card" />
-					<div className="mt-3 h-3 w-1/3 rounded-[2px] bg-card" />
+					<div className="h-4 w-2/3 rounded-full bg-card" />
+					<div className="mt-3 h-3 w-1/3 rounded-full bg-card" />
 				</li>
 			))}
 		</ul>
@@ -29,9 +34,11 @@ function SavedSkeleton() {
 /** A section heading in the same voice as the agenda's day headings. */
 function SectionHeading({ label, count }: { label: string; count: number }) {
 	return (
-		<h2 className="mt-10 flex items-baseline justify-between gap-4 border-border border-b py-3 first:mt-0">
-			<span className="p443-card-title">{label}</span>
-			<span className="shrink-0 font-mono text-[12px] text-muted-foreground tabular-nums">
+		<h2 className="flex items-baseline justify-between gap-4 border-foreground border-b pt-3 pb-3">
+			<span className="type-section text-[1.375rem] sm:text-[1.625rem]">
+				{label}
+			</span>
+			<span className="shrink-0 text-[14px] text-muted-foreground tabular-nums">
 				{count} {plural(count, "evento", "eventos")}
 			</span>
 		</h2>
@@ -97,7 +104,7 @@ function MissingRow({
 				<p className="text-[15px] text-muted-foreground">
 					Evento já não disponível
 				</p>
-				<p className={`${MICRO} mt-1 truncate text-muted-foreground/85`}>
+				<p className={`${CAPTION} mt-1 truncate text-muted-foreground/85`}>
 					{slug}
 				</p>
 			</div>
@@ -105,7 +112,7 @@ function MissingRow({
 				type="button"
 				onClick={onRemove}
 				disabled={pending}
-				className="focus-ring inline-flex h-11 shrink-0 items-center rounded-[4px] border border-control px-3 text-[13px] hover:border-primary/60 hover:text-primary disabled:opacity-50 motion-safe:transition-colors"
+				className={BUTTON}
 			>
 				Remover
 			</button>
@@ -116,15 +123,12 @@ function MissingRow({
 /** Signed out: say what the page is for and offer the way in, back to here. */
 function SignedOut() {
 	return (
-		<div className="mt-8 rounded-[4px] border border-border bg-card p-6">
-			<p className="text-[15px] leading-relaxed">
+		<div className="mt-10 max-w-xl rounded-[20px] bg-primary-surface p-6 sm:p-8">
+			<p className="text-[16px] leading-relaxed">
 				Guarde os eventos que quer acompanhar e eles ficam nesta página, no
 				telemóvel e no computador.
 			</p>
-			<a
-				href={signInHref(savedHref())}
-				className="focus-ring mt-5 inline-flex h-11 items-center rounded-[4px] bg-primary px-4 font-medium text-[14px] text-primary-foreground hover:bg-primary/90 motion-safe:transition-colors"
-			>
+			<a href={signInHref(savedHref())} className={`${PRIMARY_BUTTON} mt-5`}>
 				Entrar para guardar
 			</a>
 		</div>
@@ -134,16 +138,13 @@ function SignedOut() {
 /** Signed in, nothing saved yet. */
 function NothingSaved() {
 	return (
-		<div className="mt-8 rounded-[4px] border border-border bg-card p-6">
-			<p className="text-[15px] leading-relaxed">
+		<div className="mt-10 max-w-xl rounded-[20px] border border-border bg-card p-6 sm:p-8">
+			<p className="text-[16px] leading-relaxed">
 				Ainda não guardou nada. Na agenda, toque em{" "}
 				<span className="font-medium">Guardar</span> no evento que lhe interessa
 				— fica aqui à espera.
 			</p>
-			<a
-				href="/"
-				className="focus-ring mt-5 inline-flex h-11 items-center rounded-[4px] border border-control px-4 text-[14px] hover:border-primary/60 hover:text-primary motion-safe:transition-colors"
-			>
+			<a href="/" className={`${BUTTON} mt-5`}>
 				Ver a agenda
 			</a>
 		</div>
@@ -189,9 +190,12 @@ export function SavedPage() {
 	return (
 		<div className="min-h-svh">
 			<main className={SHELL}>
-				<header className="mt-14 sm:mt-20">
-					<h1 className="p443-display max-w-[24ch] text-balance">Guardados.</h1>
-					<p className="p443-dek mt-6 max-w-[46ch] text-pretty text-muted-foreground">
+				<header className="pt-8 sm:pt-12">
+					<p className={`${CAPTION} text-primary`}>A tua lista</p>
+					<h1 className="type-display mt-3 max-w-[24ch] text-balance">
+						Guardados.
+					</h1>
+					<p className="type-dek mt-4 max-w-[46ch] text-pretty text-muted-foreground">
 						{saved.signedIn && count > 0
 							? `${count} ${plural(count, "evento guardado", "eventos guardados")}.`
 							: "Os eventos que guardar ficam aqui, prontos para voltar a ver."}
@@ -219,11 +223,11 @@ export function SavedPage() {
 				) : (
 					<div>
 						{upcoming.length > 0 ? (
-							<section aria-labelledby="guardados-a-seguir" className="pt-8">
+							<section aria-labelledby="guardados-a-seguir" className="pt-10">
 								<div id="guardados-a-seguir">
 									<SectionHeading label="A seguir" count={upcoming.length} />
 								</div>
-								<ul className="mt-2">
+								<ul>
 									{upcoming.map((event) => (
 										<SavedRow key={event.slug} event={event} />
 									))}
@@ -232,11 +236,11 @@ export function SavedPage() {
 						) : null}
 
 						{past.length > 0 ? (
-							<section aria-labelledby="guardados-passados" className="pt-8">
+							<section aria-labelledby="guardados-passados" className="pt-12">
 								<div id="guardados-passados">
 									<SectionHeading label="Já passaram" count={past.length} />
 								</div>
-								<ul className="mt-2">
+								<ul>
 									{past.map((event) => (
 										<SavedRow key={event.slug} event={event} />
 									))}
@@ -245,14 +249,14 @@ export function SavedPage() {
 						) : null}
 
 						{missing.length > 0 ? (
-							<section aria-labelledby="guardados-perdidos" className="pt-8">
+							<section aria-labelledby="guardados-perdidos" className="pt-12">
 								<div id="guardados-perdidos">
 									<SectionHeading
 										label="Já não disponíveis"
 										count={missing.length}
 									/>
 								</div>
-								<ul className="mt-2">
+								<ul>
 									{missing.map((slug) => (
 										<MissingRow
 											key={slug}

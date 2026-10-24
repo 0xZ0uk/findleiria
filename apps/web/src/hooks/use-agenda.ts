@@ -69,6 +69,10 @@ export type AgendaRow = {
 	endDayKey: string | null;
 	/** Pre-normalised `title venue city categories`, so typing is a substring test. */
 	haystack: string;
+	/** True free, false paid, null when no source said. */
+	isFree: boolean | null;
+	/** Epoch seconds an editor picked it as the week's pick; null otherwise. */
+	featuredAt: number | null;
 };
 
 export type AnnouncementRow = {
@@ -101,6 +105,8 @@ export type Filters = {
 	venue: string;
 	from: string;
 	to: string;
+	/** "1" keeps only events a source confirmed as free; "" shows everything. */
+	free: string;
 };
 
 export type AgendaStatus = "loading" | "error" | "ready";
@@ -112,6 +118,7 @@ const EMPTY_FILTERS: Filters = {
 	venue: "",
 	from: "",
 	to: "",
+	free: "",
 };
 
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
@@ -122,6 +129,7 @@ const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
  *   ?concelho=Óbidos&de=2026-09-18&ate=2026-09-20   — the weekend in Óbidos
  *   ?q=maria&tipo=Concertos                          — search + category
  *   ?local=sociedade-filarmonica                      — one venue
+ *   ?gratis=1                                         — free entry only
  *
  * `dia` is a day anchor, not a filter: it scrolls to that day and survives every
  * other change, so "here's the 20th" is one link.
@@ -133,6 +141,7 @@ const URL_PARAM: Record<keyof Filters, string> = {
 	venue: "local",
 	from: "de",
 	to: "ate",
+	free: "gratis",
 };
 
 function readDayKey(raw: string | null): string {
@@ -157,6 +166,7 @@ function filtersFromSearch(search: string): {
 			// showing an empty agenda that looks like "there is nothing on".
 			from: to && from > to ? "" : from,
 			to,
+			free: params.get(URL_PARAM.free) === "1" ? "1" : "",
 		},
 		dia: readDayKey(params.get("dia")),
 		vista: readView(params.get(VISTA_PARAM)),
@@ -211,6 +221,8 @@ function toRow(event: PublicEvent): AgendaRow {
 			event.venueCity,
 			categories.join(" "),
 		),
+		isFree: event.isFree ?? null,
+		featuredAt: event.featuredAt ?? null,
 	};
 }
 
@@ -246,13 +258,15 @@ function matches(row: AgendaRow, filters: Filters, needle: string): boolean {
 	const key = row.dayKey;
 	if (filters.from && key < filters.from) return false;
 	if (filters.to && key > filters.to) return false;
+	if (filters.free && row.isFree !== true) return false;
 	return true;
 }
 
 /**
  * The same search, concelho, type and venue tests as `matches`, for the undated
  * announcements. The date range is left out on purpose: an announcement has no
- * day, so it can be neither inside nor outside a range.
+ * day, so it can be neither inside nor outside a range. "Free only" hides them
+ * all: no undated source says what entry costs, and an unknown is not free.
  */
 function matchesAnnouncement(
 	row: AnnouncementRow,
@@ -264,6 +278,7 @@ function matchesAnnouncement(
 	if (filters.category && !row.categories.includes(filters.category))
 		return false;
 	if (filters.venue && row.venueSlug !== filters.venue) return false;
+	if (filters.free) return false;
 	return true;
 }
 
@@ -528,7 +543,8 @@ export function useAgenda() {
 			filters.category ||
 			filters.venue ||
 			filters.from ||
-			filters.to,
+			filters.to ||
+			filters.free,
 	);
 	const visible = useMemo(
 		() =>
@@ -634,6 +650,19 @@ export function useAgenda() {
 		[applyFilters, range.todayKey],
 	);
 
+	/**
+	 * One day from the day strip: both bounds on the same key. Picking the day
+	 * that is already the whole range clears it, like a lit period chip.
+	 */
+	const setDay = useCallback(
+		(key: string) => {
+			const { from, to } = filtersRef.current;
+			if (from === key && to === key) applyFilters({ from: "", to: "" });
+			else applyFilters({ from: key, to: key });
+		},
+		[applyFilters],
+	);
+
 	const preset = useMemo(
 		() => activePreset(filters.from, filters.to, range.todayKey),
 		[filters.from, filters.to, range.todayKey],
@@ -659,6 +688,7 @@ export function useAgenda() {
 		setFilter,
 		clearFilters,
 		setPeriod,
+		setDay,
 		vista,
 		setView,
 		preset,

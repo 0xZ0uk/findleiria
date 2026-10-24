@@ -15,13 +15,13 @@ export function AgendaSkeleton() {
 			<div className="mt-2" aria-hidden="true">
 				{rows.map((group) => (
 					<div key={group} className="mt-8 first:mt-0">
-						<div className="h-5 w-36 rounded-[2px] bg-card motion-safe:animate-pulse" />
+						<div className="h-6 w-40 rounded-full bg-card motion-safe:animate-pulse" />
 						{rows.map((row) => (
 							<div key={row} className="mt-5 flex gap-3">
-								<div className="hidden size-16 shrink-0 rounded-[4px] bg-card motion-safe:animate-pulse sm:block" />
+								<div className="hidden size-16 shrink-0 rounded-xl bg-card motion-safe:animate-pulse sm:block" />
 								<div className="min-w-0 flex-1 space-y-2 pt-1">
-									<div className="h-4 w-2/3 rounded-[2px] bg-card motion-safe:animate-pulse" />
-									<div className="h-3 w-1/3 rounded-[2px] bg-card motion-safe:animate-pulse" />
+									<div className="h-4 w-2/3 rounded-full bg-card motion-safe:animate-pulse" />
+									<div className="h-3 w-1/3 rounded-full bg-card motion-safe:animate-pulse" />
 								</div>
 							</div>
 						))}
@@ -44,11 +44,11 @@ export function AgendaError({
 }) {
 	return (
 		<div role="alert" className="mt-4 max-w-[46ch]">
-			<p className="p443-card-title">Não foi possível carregar {what}.</p>
+			<p className="type-section">Não foi possível carregar {what}.</p>
 			<p className="mt-2 text-[15px] text-muted-foreground leading-relaxed">
 				A leitura dos dados falhou. Tenta de novo.
 			</p>
-			<p className="mt-3 line-clamp-3 break-words font-mono text-[12px] text-muted-foreground/85">
+			<p className="mt-3 line-clamp-3 break-words text-[13px] text-muted-foreground/85">
 				{message}
 			</p>
 			<button type="button" onClick={onRetry} className={`${BUTTON} mt-5`}>
@@ -83,7 +83,7 @@ export function AgendaEmpty({ agenda }: { agenda: Agenda }) {
 				strokeWidth={1.5}
 				className="size-5 text-muted-foreground"
 			/>
-			<p className="p443-card-title mt-4">{headline}</p>
+			<p className="type-section mt-4">{headline}</p>
 			<p className="mt-2 text-[15px] text-muted-foreground leading-relaxed">
 				{hint}
 			</p>

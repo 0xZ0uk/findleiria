@@ -9,8 +9,8 @@ import { useSavedStore } from "./saved-context";
  * rows); `detail` is the fuller button on the event's own page. Both are
  * ≥44px tall on phones. Signed out it is a plain link back to the sign-in page
  * — saving needs an account, so there is no silent failure and no local-only
- * list. The active state reads as the one amber mark next to the reader's own
- * choice, so "Guardado" sits in the page's primary colour.
+ * list. The active state is the reader's own choice, so it takes the primary
+ * green, and the filled icon carries it too, so it never rests on colour alone.
  */
 export function SaveButton({
 	slug,
@@ -23,25 +23,28 @@ export function SaveButton({
 	const isSaved = saved.isSaved(slug);
 
 	const text = isSaved ? "Guardado" : "Guardar";
-	// In a row the label goes away below `sm`: at 320px the title needs the
-	// width more than a repeated word does. The icon keeps its accessible name
-	// from `aria-label`, so the icon-only shape still says what it does.
-	const labelClass = layout === "row" ? "hidden sm:inline" : "";
+	// In a row the label goes: a word repeated on every line competes with the
+	// titles. The icon keeps its accessible name from `aria-label`, so the
+	// icon-only shape still says what it does.
+	const labelClass = layout === "row" ? "sr-only" : "";
 	const name = isSaved ? "Remover dos guardados" : "Guardar evento";
 
 	const sizeClass =
 		layout === "detail"
 			? "h-11 gap-2 px-4 text-[15px] sm:h-10"
-			: "h-11 gap-1.5 px-2.5 text-[13px] sm:h-10";
+			: "size-11 text-[13px]";
 
 	const baseClass =
-		"inline-flex shrink-0 items-center justify-center rounded-[4px] font-medium focus-ring motion-safe:transition-colors";
+		"inline-flex shrink-0 items-center justify-center rounded-full font-medium focus-ring motion-safe:transition-colors";
 
-	const stateClass = isSaved
-		? layout === "detail"
-			? "border border-primary bg-primary text-primary-foreground hover:bg-primary/90"
-			: "border border-primary/60 text-primary"
-		: "border border-control bg-card text-foreground hover:border-primary/60 hover:text-primary";
+	const stateClass =
+		layout === "detail"
+			? isSaved
+				? "border border-primary bg-primary-surface text-primary hover:bg-primary-surface/70"
+				: "border border-control bg-background text-foreground hover:bg-card"
+			: isSaved
+				? "text-primary hover:bg-primary-surface"
+				: "text-muted-foreground hover:bg-card hover:text-primary";
 
 	// Signed out, the control is a route to the session page, keeping wherever
 	// the reader was so they land back here after signing in. The query string
@@ -66,8 +69,8 @@ export function SaveButton({
 			>
 				<Bookmark
 					aria-hidden="true"
-					strokeWidth={1.5}
-					className="size-4 shrink-0"
+					strokeWidth={1.75}
+					className={layout === "row" ? "size-5 shrink-0" : "size-4 shrink-0"}
 				/>
 				<span className={labelClass}>Guardar</span>
 			</a>
@@ -88,8 +91,8 @@ export function SaveButton({
 		>
 			<Bookmark
 				aria-hidden="true"
-				strokeWidth={1.5}
-				className="size-4 shrink-0"
+				strokeWidth={1.75}
+				className={layout === "row" ? "size-5 shrink-0" : "size-4 shrink-0"}
 				fill={isSaved ? "currentColor" : "none"}
 			/>
 			<span className={labelClass}>{text}</span>

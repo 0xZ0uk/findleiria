@@ -34,9 +34,7 @@ export class ErrorBoundary extends Component<Props, State> {
 		const stale = isChunkLoadError(error);
 		return (
 			<div role="alert" className="max-w-[46ch] py-6">
-				<p className="p443-card-title">
-					{this.props.title ?? "Algo correu mal."}
-				</p>
+				<p className="type-section">{this.props.title ?? "Algo correu mal."}</p>
 				<p className="mt-2 text-[15px] text-muted-foreground leading-relaxed">
 					{stale
 						? "O site foi atualizado entretanto. Recarrega a página para obter a versão mais recente."

@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useId, useState } from "react";
 import type { Agenda, Facet } from "@/hooks/use-agenda";
-import { BUTTON, FIELD, LABEL, MICRO } from "./layout";
+import { BUTTON, CAPTION, FIELD, LABEL, SHELL } from "./layout";
 import { EventCount } from "./states";
 
 /**
@@ -28,16 +28,16 @@ function useSettled<T>(value: T, delay: number): T {
 }
 
 const CHEVRON =
-	"pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground";
+	"pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground";
 
 /**
  * Period chips are a toggle, not a radio: clicking the lit one clears the range,
  * so the fastest way out of "Hoje" is the same control that got you in.
  */
 const CHIP_OFF =
-	"inline-flex h-9 shrink-0 items-center rounded-[4px] border border-control bg-card px-3 text-[14px] font-medium text-foreground focus-ring motion-safe:transition-colors hover:border-primary/60 hover:text-primary";
+	"inline-flex h-10 shrink-0 items-center rounded-full border border-border bg-background px-4 text-[14px] font-medium text-foreground focus-ring motion-safe:transition-colors hover:border-control";
 const CHIP_ON =
-	"inline-flex h-9 shrink-0 items-center rounded-[4px] border border-primary bg-primary px-3 text-[14px] font-medium text-primary-foreground focus-ring motion-safe:transition-colors";
+	"inline-flex h-10 shrink-0 items-center rounded-full border border-primary bg-primary px-4 text-[14px] font-medium text-primary-foreground focus-ring motion-safe:transition-colors hover:bg-primary-hover";
 
 function FacetSelect({
 	id,
@@ -64,7 +64,7 @@ function FacetSelect({
 					id={id}
 					value={value}
 					onChange={(event) => onChange(event.target.value)}
-					className={`${FIELD} appearance-none pr-9`}
+					className={`${FIELD} appearance-none pr-10`}
 				>
 					<option value="">{all}</option>
 					{options.map((option) => (
@@ -119,13 +119,13 @@ function DateRange({
  */
 function PeriodChips({ agenda }: { agenda: Agenda }) {
 	return (
-		<fieldset className="m-0 mt-3 flex min-w-0 flex-wrap items-center gap-2 border-0 p-0">
+		<fieldset className="scrollbar-none m-0 -mx-5 mt-4 flex min-w-0 items-center gap-2 overflow-x-auto border-0 px-5 py-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
 			{/* The visible caption is decorative; the legend names the group for
 			    assistive tech without adding a line to the layout. */}
 			<legend className="sr-only">Período</legend>
 			<span
 				aria-hidden="true"
-				className={`${MICRO} mr-1 text-muted-foreground`}
+				className={`${CAPTION} mr-1 shrink-0 text-muted-foreground`}
 			>
 				Período
 			</span>
@@ -146,6 +146,17 @@ function PeriodChips({ agenda }: { agenda: Agenda }) {
 					</button>
 				);
 			})}
+			<span aria-hidden="true" className="mx-1 h-6 w-px shrink-0 bg-border" />
+			<button
+				type="button"
+				aria-pressed={agenda.filters.free === "1"}
+				onClick={() =>
+					agenda.setFilter("free", agenda.filters.free === "1" ? "" : "1")
+				}
+				className={agenda.filters.free === "1" ? CHIP_ON : CHIP_OFF}
+			>
+				Entrada livre
+			</button>
 		</fieldset>
 	);
 }
@@ -212,7 +223,7 @@ function ViewToggle({ agenda }: { agenda: Agenda }) {
 		<div
 			role="group"
 			aria-label="Vista"
-			className="inline-flex h-11 shrink-0 items-center gap-0.5 rounded-[4px] border border-control p-0.5 sm:h-10"
+			className="inline-flex h-11 shrink-0 items-center gap-1 rounded-full border border-border bg-background p-1 sm:h-10"
 		>
 			{views.map(({ id, label, Icon }) => {
 				const active = agenda.vista === id;
@@ -222,10 +233,10 @@ function ViewToggle({ agenda }: { agenda: Agenda }) {
 						type="button"
 						onClick={() => agenda.setView(id)}
 						aria-pressed={active}
-						className={`focus-ring inline-flex h-full items-center gap-1.5 rounded-[3px] px-2.5 font-medium text-[14px] motion-safe:transition-colors ${
+						className={`focus-ring inline-flex h-full items-center gap-1.5 rounded-full px-3.5 font-medium text-[14px] motion-safe:transition-colors ${
 							active
-								? "bg-primary text-primary-foreground"
-								: "text-foreground hover:text-primary"
+								? "bg-primary-surface text-primary"
+								: "text-muted-foreground hover:text-foreground"
 						}`}
 					>
 						<Icon aria-hidden="true" strokeWidth={1.5} className="size-4" />
@@ -258,147 +269,150 @@ export function FilterBar({ agenda }: { agenda: Agenda }) {
 	const facetsId = `${id}-facets`;
 
 	return (
-		<section aria-labelledby={`${id}-heading`}>
-			<h2 id={`${id}-heading`} className="sr-only">
-				Filtros
-			</h2>
+		<section
+			aria-labelledby={`${id}-heading`}
+			className="border-border border-y bg-card"
+		>
+			<div className={`${SHELL} py-5 sm:py-6`}>
+				<div className="flex flex-wrap items-end gap-3">
+					<h2
+						id={`${id}-heading`}
+						className="type-section mr-4 basis-full self-center sm:basis-auto"
+					>
+						Agenda
+					</h2>
+					<div className="min-w-0 flex-1 basis-full sm:max-w-sm sm:basis-auto">
+						<label htmlFor={searchId} className="sr-only">
+							Procurar
+						</label>
+						<div className="group relative">
+							<Search
+								aria-hidden="true"
+								strokeWidth={1.5}
+								className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground"
+							/>
+							<input
+								id={searchId}
+								type="search"
+								value={filters.q}
+								onChange={(event) => agenda.setFilter("q", event.target.value)}
+								placeholder="Nome, local ou tema"
+								autoComplete="off"
+								spellCheck={false}
+								enterKeyHint="search"
+								className={`${FIELD} pl-10`}
+							/>
+						</div>
+					</div>
 
-			<div className="flex flex-wrap items-end gap-3">
-				<div className="min-w-0 flex-none basis-full sm:basis-[calc((200%_-_12px)/3)] lg:basis-[calc((200%_-_60px)/7)]">
-					<label htmlFor={searchId} className={LABEL}>
-						Procurar
-					</label>
-					<div className="group relative">
-						<Search
+					<button
+						type="button"
+						onClick={() => setOpen((current) => !current)}
+						aria-expanded={open}
+						aria-controls={facetsId}
+						className={`${BUTTON} sm:hidden`}
+					>
+						Filtros
+						{agenda.activeCount > 0 ? (
+							<span className="grid size-6 place-items-center rounded-full bg-primary-surface font-semibold text-[12px] text-primary tabular-nums">
+								{agenda.activeCount}
+							</span>
+						) : null}
+						<ChevronDown
 							aria-hidden="true"
 							strokeWidth={1.5}
-							className={`pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground motion-safe:transition-[opacity,transform,filter] motion-safe:duration-150 ${
-								filters.q
-									? "opacity-100"
-									: "scale-75 opacity-0 blur-[2px] group-focus-within:scale-100 group-focus-within:opacity-100 group-focus-within:blur-0"
-							}`}
+							className={`size-4 motion-safe:transition-transform motion-safe:duration-150 ${open ? "rotate-180" : ""}`}
 						/>
-						<input
-							id={searchId}
-							type="search"
-							value={filters.q}
-							onChange={(event) => agenda.setFilter("q", event.target.value)}
-							placeholder="Nome, local ou tema"
-							autoComplete="off"
-							spellCheck={false}
-							enterKeyHint="search"
-							className={`${FIELD} pl-9`}
-						/>
+					</button>
+
+					{/* Top-right, and outside the fold on a phone: the list/map switch is
+				    the one control that changes what the page is, not what is in it. */}
+					<div className="ml-auto">
+						<ViewToggle agenda={agenda} />
 					</div>
 				</div>
 
-				<button
-					type="button"
-					onClick={() => setOpen((current) => !current)}
-					aria-expanded={open}
-					aria-controls={facetsId}
-					className={`${BUTTON} sm:hidden`}
-				>
-					Filtros
-					{agenda.activeCount > 0 ? (
-						<span className={`${MICRO} text-primary`}>
-							{agenda.activeCount}
-						</span>
-					) : null}
-					<ChevronDown
-						aria-hidden="true"
-						strokeWidth={1.5}
-						className={`size-4 motion-safe:transition-transform motion-safe:duration-150 ${open ? "rotate-180" : ""}`}
-					/>
-				</button>
+				<PeriodChips agenda={agenda} />
 
-				{/* Top-right, and outside the fold on a phone: the list/map switch is
-				    the one control that changes what the page is, not what is in it. */}
-				<div className="ml-auto">
-					<ViewToggle agenda={agenda} />
+				<div
+					id={facetsId}
+					className={`mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 ${open ? "" : "hidden sm:grid"}`}
+				>
+					<FacetSelect
+						id={`${id}-city`}
+						label="Concelho"
+						all="Todos"
+						value={filters.city}
+						options={facets.cities}
+						onChange={(value) => agenda.setFilter("city", value)}
+					/>
+					<FacetSelect
+						id={`${id}-category`}
+						label="Tipo"
+						all="Todos"
+						value={filters.category}
+						options={facets.categories}
+						onChange={(value) => agenda.setFilter("category", value)}
+					/>
+					<FacetSelect
+						id={`${id}-venue`}
+						label="Local"
+						all="Todos"
+						value={filters.venue}
+						options={facets.venues}
+						onChange={(value) => agenda.setFilter("venue", value)}
+					/>
+					<DateRange
+						id={`${id}-from`}
+						label="De"
+						value={filters.from}
+						min={rangeBounds.min}
+						max={filters.to || rangeBounds.max}
+						onChange={(value) => agenda.setFilter("from", value)}
+					/>
+					<DateRange
+						id={`${id}-to`}
+						label="Até"
+						value={filters.to}
+						min={filters.from || rangeBounds.min}
+						max={rangeBounds.max}
+						onChange={(value) => agenda.setFilter("to", value)}
+					/>
 				</div>
-			</div>
 
-			<PeriodChips agenda={agenda} />
-
-			<div
-				id={facetsId}
-				className={`mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7 ${open ? "" : "hidden sm:grid"}`}
-			>
-				<FacetSelect
-					id={`${id}-city`}
-					label="Concelho"
-					all="Todos"
-					value={filters.city}
-					options={facets.cities}
-					onChange={(value) => agenda.setFilter("city", value)}
-				/>
-				<FacetSelect
-					id={`${id}-category`}
-					label="Tipo"
-					all="Todos"
-					value={filters.category}
-					options={facets.categories}
-					onChange={(value) => agenda.setFilter("category", value)}
-				/>
-				<FacetSelect
-					id={`${id}-venue`}
-					label="Local"
-					all="Todos"
-					value={filters.venue}
-					options={facets.venues}
-					onChange={(value) => agenda.setFilter("venue", value)}
-				/>
-				<DateRange
-					id={`${id}-from`}
-					label="De"
-					value={filters.from}
-					min={rangeBounds.min}
-					max={filters.to || rangeBounds.max}
-					onChange={(value) => agenda.setFilter("from", value)}
-				/>
-				<DateRange
-					id={`${id}-to`}
-					label="Até"
-					value={filters.to}
-					min={filters.from || rangeBounds.min}
-					max={rangeBounds.max}
-					onChange={(value) => agenda.setFilter("to", value)}
-				/>
-			</div>
-
-			<div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-				{/* The visible count updates live; screen readers get the settled one
+				<div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+					{/* The visible count updates live; screen readers get the settled one
 				    through the status region below, so typing does not spam them. */}
-				<p
-					aria-hidden="true"
-					className="font-mono text-[12px] text-muted-foreground tabular-nums"
-				>
-					<EventCount
-						total={agenda.rows.length}
-						shown={agenda.visible.length}
-						days={agenda.window.days}
-					/>
-				</p>
-				<p role="status" className="sr-only">
-					<EventCount
-						total={agenda.rows.length}
-						shown={announcedShown}
-						days={agenda.window.days}
-					/>
-				</p>
-				<div className="flex flex-wrap items-center gap-2">
-					<CopyLinkButton />
-					{agenda.isFiltered ? (
-						<button
-							type="button"
-							onClick={agenda.clearFilters}
-							className={BUTTON}
-						>
-							<X aria-hidden="true" strokeWidth={1.5} className="size-4" />
-							Limpar filtros
-						</button>
-					) : null}
+					<p
+						aria-hidden="true"
+						className="text-[14px] text-muted-foreground tabular-nums"
+					>
+						<EventCount
+							total={agenda.rows.length}
+							shown={agenda.visible.length}
+							days={agenda.window.days}
+						/>
+					</p>
+					<p role="status" className="sr-only">
+						<EventCount
+							total={agenda.rows.length}
+							shown={announcedShown}
+							days={agenda.window.days}
+						/>
+					</p>
+					<div className="flex flex-wrap items-center gap-2">
+						<CopyLinkButton />
+						{agenda.isFiltered ? (
+							<button
+								type="button"
+								onClick={agenda.clearFilters}
+								className={BUTTON}
+							>
+								<X aria-hidden="true" strokeWidth={1.5} className="size-4" />
+								Limpar filtros
+							</button>
+						) : null}
+					</div>
 				</div>
 			</div>
 		</section>

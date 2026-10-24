@@ -1,8 +1,14 @@
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { BUTTON, FIELD, LABEL, MICRO, SHELL } from "@/components/agenda/layout";
+import {
+	BUTTON,
+	CAPTION,
+	FIELD,
+	LABEL,
+	PRIMARY_BUTTON,
+	SHELL,
+} from "@/components/agenda/layout";
 import { Wordmark } from "@/components/agenda/wordmark";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import {
 	sendVerificationEmail,
@@ -48,7 +54,7 @@ function nextPath(): string {
 /**
  * Google's own mark, in Google's own four colours.
  *
- * The one place on this site that is not amber: it is somebody else's brand and
+ * The one place on this site that is not ours: it is somebody else's brand and
  * people find it by colour, on a phone, in a hurry.
  */
 function GoogleMark() {
@@ -107,7 +113,7 @@ function CheckYourEmail({
 	}
 
 	return (
-		<div className="mt-8 rounded-[4px] border border-border bg-card p-5">
+		<div className="mt-8 rounded-[20px] border border-border bg-card p-6">
 			<p role="status" className="text-[15px]">
 				Enviámos-te um email para confirmares a conta.
 			</p>
@@ -122,14 +128,14 @@ function CheckYourEmail({
 					type="button"
 					onClick={() => void resend()}
 					disabled={state === "sending"}
-					className="focus-ring inline-flex h-11 shrink-0 items-center rounded-[4px] border border-control bg-card px-4 font-medium text-[15px] hover:border-primary/60 hover:text-primary disabled:opacity-50 motion-safe:transition-colors sm:h-10"
+					className={BUTTON}
 				>
 					{state === "sending" ? "Um momento…" : "Reenviar email"}
 				</button>
 				<button
 					type="button"
 					onClick={onBack}
-					className="focus-ring inline-flex min-h-11 items-center font-medium text-[14px] text-primary underline underline-offset-4 hover:text-primary/80 motion-safe:transition-colors"
+					className="focus-ring inline-flex min-h-11 items-center font-medium text-[14px] text-primary underline underline-offset-4 hover:decoration-2 motion-safe:transition-colors"
 				>
 					Usar outro email
 				</button>
@@ -152,18 +158,14 @@ function CheckYourEmail({
 /** The half of the page that says you are already somebody here. */
 function SignedIn({ email }: { email: string }) {
 	return (
-		<div className="mt-8 rounded-[4px] border border-border bg-card p-5">
-			<p className={`${MICRO} text-muted-foreground`}>Sessão iniciada</p>
+		<div className="mt-8 rounded-[20px] border border-border bg-card p-6">
+			<p className={`${CAPTION} text-muted-foreground`}>Sessão iniciada</p>
 			<p className="mt-2 truncate text-[15px]">{email}</p>
 			<div className="mt-4 flex flex-wrap gap-2">
 				<a href="/" className={BUTTON}>
 					Voltar à agenda
 				</a>
-				<button
-					type="button"
-					onClick={() => void signOut()}
-					className="focus-ring inline-flex h-11 shrink-0 items-center rounded-[4px] border border-control bg-card px-4 font-medium text-[15px] hover:border-primary/60 hover:text-primary motion-safe:transition-colors sm:h-10"
-				>
+				<button type="button" onClick={() => void signOut()} className={BUTTON}>
 					Terminar sessão
 				</button>
 			</div>
@@ -179,7 +181,7 @@ function SignedIn({ email }: { email: string }) {
  *
  * One form with a switch underneath, not two tabs above it: signing in and
  * creating an account ask for the same two fields, and the switch keeps the
- * amber fill for the button that actually does something.
+ * green fill for the button that actually does something.
  */
 export function SignInPage() {
 	useDocumentMeta(
@@ -252,10 +254,15 @@ export function SignInPage() {
 
 	return (
 		<div className="min-h-svh">
-			<header className={`${SHELL} pt-6 sm:pt-10`}>
-				<div className="flex items-center justify-between gap-4">
-					<Wordmark />
-					<ThemeToggle />
+			<header className="border-border border-b">
+				<div className={`${SHELL} flex h-16 items-center sm:h-[76px]`}>
+					<a
+						href="/"
+						aria-label="FindLeiria, agenda"
+						className="focus-ring -mx-1 rounded-lg px-1"
+					>
+						<Wordmark />
+					</a>
 				</div>
 			</header>
 
@@ -263,7 +270,7 @@ export function SignInPage() {
 				<div className="max-w-md">
 					<a
 						href="/"
-						className="focus-ring -my-3.5 inline-flex min-h-11 items-center gap-1.5 py-3.5 font-mono text-[12px] text-muted-foreground uppercase tracking-[0.14em] hover:text-foreground motion-safe:transition-colors"
+						className="focus-ring -my-3.5 inline-flex min-h-11 items-center gap-1.5 py-3.5 text-[13px] text-muted-foreground hover:text-foreground motion-safe:transition-colors"
 					>
 						<ArrowLeft
 							aria-hidden="true"
@@ -273,8 +280,8 @@ export function SignInPage() {
 						Agenda
 					</a>
 
-					<h1 className="p443-display mt-6 text-balance">A tua conta</h1>
-					<p className="p443-dek mt-4 text-pretty text-muted-foreground">
+					<h1 className="type-display mt-6 text-balance">A tua conta</h1>
+					<p className="type-dek mt-4 text-pretty text-muted-foreground">
 						Entra com a conta Google que já tens no telemóvel, ou com um email e
 						uma palavra-passe. É o que basta para guardar eventos.
 					</p>
@@ -292,13 +299,13 @@ export function SignInPage() {
 						/>
 					) : (
 						<div className="mt-8">
-							{/* The provider button is the quiet one: amber is for the form's own
+							{/* The provider button is the quiet one: the green fill is for the form's own
 							    submit, so the page has one fill per way in. */}
 							<button
 								type="button"
 								onClick={() => void withGoogle()}
 								disabled={pending}
-								className="focus-ring inline-flex h-11 w-full items-center justify-center gap-2.5 rounded-[4px] border border-control bg-card px-4 font-medium text-[15px] text-foreground hover:border-primary/60 hover:text-primary disabled:opacity-50 motion-safe:transition-colors sm:h-10"
+								className={`${BUTTON} w-full gap-2.5`}
 							>
 								<GoogleMark />
 								Continuar com Google
@@ -306,7 +313,7 @@ export function SignInPage() {
 
 							<div className="mt-6 flex items-center gap-3">
 								<span className="h-px flex-1 bg-border" />
-								<span className={`${MICRO} text-muted-foreground`}>ou</span>
+								<span className={`${CAPTION} text-muted-foreground`}>ou</span>
 								<span className="h-px flex-1 bg-border" />
 							</div>
 
@@ -404,7 +411,7 @@ export function SignInPage() {
 								</div>
 
 								{error ? (
-									<p role="alert" className="mt-4 text-[14px] text-primary">
+									<p role="alert" className="mt-4 text-[14px] text-destructive">
 										{error}
 									</p>
 								) : null}
@@ -412,7 +419,7 @@ export function SignInPage() {
 								<button
 									type="submit"
 									disabled={pending}
-									className="focus-ring mt-6 inline-flex h-11 w-full items-center justify-center rounded-[4px] border border-primary bg-primary px-4 font-medium text-[15px] text-primary-foreground hover:bg-primary/90 disabled:opacity-50 motion-safe:transition-colors sm:h-10"
+									className={`${PRIMARY_BUTTON} mt-6 w-full sm:h-10`}
 								>
 									{pending
 										? "Um momento…"
@@ -430,7 +437,7 @@ export function SignInPage() {
 										setMode(creating ? "entrar" : "criar");
 										setError(null);
 									}}
-									className="focus-ring -my-2 inline-flex min-h-11 items-center py-2 align-middle font-medium text-primary underline underline-offset-4 hover:text-primary/80 motion-safe:transition-colors"
+									className="focus-ring -my-2 inline-flex min-h-11 items-center py-2 align-middle font-medium text-primary underline underline-offset-4 hover:decoration-2 motion-safe:transition-colors"
 								>
 									{creating ? "Entrar" : "Criar conta"}
 								</button>

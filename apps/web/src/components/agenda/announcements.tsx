@@ -1,6 +1,6 @@
 import type { Agenda } from "@/hooks/use-agenda";
 import { EventRow } from "./event-row";
-import { MICRO } from "./layout";
+import { CAPTION } from "./layout";
 
 /**
  * The source's own undated listings. Real, rare, and kept out of the days: an
@@ -12,9 +12,9 @@ export function Announcements({ agenda }: { agenda: Agenda }) {
 	return (
 		<section
 			aria-labelledby="anuncios"
-			className="mt-20 border-border border-t pt-10"
+			className="mt-24 border-foreground border-t pt-8"
 		>
-			<h2 id="anuncios" className="p443-section-title">
+			<h2 id="anuncios" className="type-section">
 				Datas por confirmar
 			</h2>
 			<p className="mt-3 max-w-[54ch] text-[15px] text-muted-foreground leading-relaxed">
@@ -41,7 +41,7 @@ export function Announcements({ agenda }: { agenda: Agenda }) {
 				))}
 			</ul>
 
-			<p className={`${MICRO} mt-6 text-muted-foreground`}>
+			<p className={`${CAPTION} mt-6 text-muted-foreground`}>
 				{agenda.announcements.length} por confirmar
 			</p>
 		</section>
