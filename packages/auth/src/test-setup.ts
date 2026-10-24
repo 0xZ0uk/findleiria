@@ -12,6 +12,7 @@ import { afterAll } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { LibSQLDatabase } from "drizzle-orm/libsql";
 
 const dir = mkdtempSync(join(tmpdir(), "findleiria-auth-test-"));
 // Once, after every test file (a preload hook is global), not per file.
@@ -39,6 +40,8 @@ for (const name of [
 
 const { authDb } = await import("./db");
 const { migrate } = await import("drizzle-orm/libsql/migrator");
-await migrate(authDb, {
+// Tests always run on the libSQL file driver (`bun` condition of `#auth-db`);
+// `AuthDb` is the driver-neutral base type, so the migrator needs the cast.
+await migrate(authDb as unknown as LibSQLDatabase, {
 	migrationsFolder: join(import.meta.dir, "migrations"),
 });

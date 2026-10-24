@@ -27,9 +27,11 @@ const TRUE = new Set(["t", "true", "yes", "on", "1"]);
 type NodeEnv = "development" | "production" | "test";
 
 export const authEnv = {
-	// libSQL URL of the auth database. `file:...` in dev, `libsql://...` in prod.
-	AUTH_DATABASE_URL: process.env.AUTH_DATABASE_URL,
-	// Only set when AUTH_DATABASE_URL points at a remote Turso database.
+	// Dev/test only: libSQL URL of the auth database (`file:...`), read by
+	// auth-db.node.ts under Bun. Production runs on the D1 `AUTH_DB` binding and
+	// never reads these two.
+	AUTH_DATABASE_URL: read(process.env.AUTH_DATABASE_URL),
+	// Only for a remote libSQL AUTH_DATABASE_URL, which is not a production path.
 	AUTH_TURSO_TOKEN: read(process.env.AUTH_TURSO_TOKEN),
 	// Signs session cookies. Rotating it logs everyone out.
 	BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,

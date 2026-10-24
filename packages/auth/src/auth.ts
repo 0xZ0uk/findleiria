@@ -1,14 +1,12 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth";
 
-import type { createAuthDb } from "./db.js";
+import type { AuthDb } from "./db.js";
 import { authDb } from "./db.js";
 import { authEnv, getTrustedOrigins } from "./env.js";
 import { type Mailer, sendMail } from "./mailer.js";
 import { dropStaleUnverifiedUser, googleProvesOwnership } from "./ownership.js";
 import * as schema from "./schema.js";
-
-type AuthDb = ReturnType<typeof createAuthDb>;
 
 function escapeHtml(value: string): string {
 	return value
@@ -54,7 +52,13 @@ export function createAuth(
 		baseURL: authEnv.BETTER_AUTH_URL,
 		secret: authEnv.BETTER_AUTH_SECRET,
 		trustedOrigins: getTrustedOrigins(),
-		database: drizzleAdapter(database, { provider: "sqlite", schema }),
+		database: drizzleAdapter(database, {
+			provider: "sqlite",
+			schema,
+			// Explicit although it is the default: D1 rejects BEGIN/COMMIT, so a
+			// transactional adapter would work on libSQL (tests) and fail in prod.
+			transaction: false,
+		}),
 		emailAndPassword: {
 			enabled: true,
 			autoSignIn: true,
