@@ -5,8 +5,9 @@
 // the dev API uses (packages/api/src/snapshot.ts).
 //
 // Run from apps/web AFTER `vite build`:  node scripts/prerender-events.mjs
-// Env: CLOUDFLARE_ACCOUNT_ID + EVENTS_D1_ID + D1_READ_API_TOKEN (read-only;
-// never VITE_-prefixed), or a `file:` SNAPSHOT_DATABASE_URL for a local build.
+// Env: SITE_URL (the public origin, required), plus CLOUDFLARE_ACCOUNT_ID +
+// EVENTS_D1_ID + D1_READ_API_TOKEN (read-only; never VITE_-prefixed), or a
+// `file:` SNAPSHOT_DATABASE_URL for a local build.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -20,16 +21,16 @@ import {
 	closeSnapshotDb,
 	loadSnapshotBuilder,
 	openSnapshotDb,
+	siteOrigin,
 } from "./snapshot-lib.mjs";
 
 const DIST = path.join(APP_DIR, "dist");
 const DATA = path.join(DIST, "data");
-const SITE = "https://findleiria.vercel.app";
 const LISBON_TZ = "Europe/Lisbon";
 // Rendered OG cards, keyed by content (see og-cache.mjs). Between builds they
 // persist in an R2 bucket (og-r2.mjs); this directory is the local working copy
-// (under node_modules, which Vercel also restores). A missing or empty
-// directory with no R2 config is simply a cold build that renders every card.
+// (under node_modules). A missing or empty directory with no R2 config is
+// simply a cold build that renders every card.
 const OG_CACHE_DIR = path.join(APP_DIR, "node_modules", ".cache", "og-cards");
 const OG_CONCURRENCY = 4;
 
@@ -65,8 +66,7 @@ function assertSnapshotOnDisk(snapshot) {
 }
 
 // ---------------------------------------------------- client bundle leak guard
-// The bundle used to carry the Turso URL and token. Nothing in it may talk to
-// the database now: fail the build if the D1 database id, the read token, the
+// The SPA reads the static snapshot and never the database: fail the build if the D1 database id, the read token, the
 // Cloudflare API path or a libSQL client shows up in any chunk.
 function assertBundleHasNoDatabase(source) {
 	const assetsDir = path.join(DIST, "assets");
@@ -224,7 +224,7 @@ function lisbonDayLabel(epochSeconds) {
 
 // ---------------------------------------------------------------- JSON-LD
 // `row` is one `eventDirectory` row (packages/api/src/queries/events.ts).
-function buildJsonLd(row) {
+function buildJsonLd(row, SITE) {
 	// No parseable machine date => no Event JSON-LD at all.
 	if (row.dateText) return null;
 
@@ -282,6 +282,9 @@ function buildJsonLd(row) {
 // ---------------------------------------------------------------- main
 async function main() {
 	const t0 = Date.now();
+	// Before any database read: a build without its public origin is a wrong
+	// build (canonical URLs, sitemap), so stop early.
+	const { origin: SITE, host: SITE_HOST } = siteOrigin();
 	const source = buildSource();
 	assertBundleHasNoDatabase(source);
 
@@ -363,7 +366,7 @@ async function main() {
 	if (cardEntries.some((entry) => !entry.slug)) {
 		throw new Error("Row with empty slug encountered.");
 	}
-	const fingerprint = templateFingerprint(OG_TEMPLATE_FILES);
+	const fingerprint = templateFingerprint(OG_TEMPLATE_FILES, SITE_HOST);
 	const liveKeys = liveCardKeys(cardEntries, fingerprint);
 	// Remote cache: fetch what this build needs, render the rest, then upload the
 	// new cards and drop the unused ones. Never fails the build (og-r2.mjs).
@@ -374,7 +377,7 @@ async function main() {
 		cacheDir: OG_CACHE_DIR,
 		outDir: path.join(DIST, "og"),
 		fingerprint,
-		render: renderOgCard,
+		render: (card) => renderOgCard({ ...card, host: SITE_HOST }),
 		concurrency: OG_CONCURRENCY,
 	});
 	await r2.push(cardStats.renderedKeys);
@@ -394,7 +397,7 @@ async function main() {
 		const descText = row.description ? decodeEntities(row.description) : "";
 
 		// ---- per-event HTML page
-		const jsonLd = buildJsonLd(row);
+		const jsonLd = buildJsonLd(row, SITE);
 		const pageUrl = `${SITE}/evento/${slug}`;
 		const ogImageUrl = `${SITE}/og/${slug}.png`;
 

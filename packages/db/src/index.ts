@@ -5,10 +5,7 @@ import { drizzle } from "drizzle-orm/libsql";
 import * as schema from "./schema";
 
 export function createDb() {
-	const client = createClient({
-		url: env.DATABASE_URL,
-		authToken: env.TURSO_AUTH_TOKEN,
-	});
+	const client = createClient({ url: env.DATABASE_URL });
 
 	return drizzle({ client, schema });
 }

@@ -1,6 +1,6 @@
 /**
  * Auth round-trip against a real libSQL file database, through the same Hono
- * handler the Vercel function and the dev server use.
+ * handler the Worker and the dev server use.
  *
  * The database and its migrations come from the bun preload (test-setup.ts),
  * which also guarantees nothing here can reach a real database or send real mail.

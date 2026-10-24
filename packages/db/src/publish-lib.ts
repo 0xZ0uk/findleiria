@@ -368,3 +368,31 @@ export function pruneScrapeRuns(
 		[cutoff],
 	).changes;
 }
+
+/**
+ * What a Workers Builds deploy hook answers (HTTP 2xx):
+ * `{ success, errors, messages, result: { build_uuid, branch, worker } }`.
+ * A hook fired while an earlier build is still `queued` or `initializing` does
+ * not start another; it answers with that build's `build_uuid` and
+ * `already_exists: true`
+ * (https://developers.cloudflare.com/workers/ci-cd/builds/deploy-hooks/).
+ * Anything unparseable still means "accepted": the status code decided that.
+ */
+export function parseDeployHookResponse(body: string): {
+	buildUuid: string | null;
+	alreadyQueued: boolean;
+} {
+	try {
+		const parsed = JSON.parse(body) as {
+			build_uuid?: unknown;
+			result?: { build_uuid?: unknown; already_exists?: unknown } | null;
+		} | null;
+		const uuid = parsed?.result?.build_uuid ?? parsed?.build_uuid;
+		return {
+			buildUuid: typeof uuid === "string" && uuid !== "" ? uuid : null,
+			alreadyQueued: parsed?.result?.already_exists === true,
+		};
+	} catch {
+		return { buildUuid: null, alreadyQueued: false };
+	}
+}

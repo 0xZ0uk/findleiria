@@ -10,5 +10,4 @@
  */
 process.env.NODE_ENV = "test";
 process.env.DATABASE_URL = ":memory:";
-process.env.TURSO_AUTH_TOKEN = "";
 process.env.CORS_ORIGIN = "http://localhost:3300";

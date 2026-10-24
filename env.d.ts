@@ -3,31 +3,29 @@
 // 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑
 // @ts-nocheck
 /* eslint-disable */
+
+// NOTE: the `process.env` augmentation was skipped because worker-configuration.d.ts
+// already declares NodeJS.ProcessEnv, and two declarations of it cannot both apply.
+// Use `ENV` for the full types, or set `processEnv=strict` on @generateTsTypes to override.
 export type CoercedEnvSchema = {
   /**
    * **NODE_ENV**  
    * Runtime mode. Left unset locally (the code treats unset as "development").  
    * Deliberately no default here: a default would be injected into every  
    * `varlock run` child, and NODE_ENV=development under `vite build` ships a  
-   * development React build. Vercel sets "production" at runtime.  
+   * development React build. The Worker is never configured with it: wrangler  
+   * bakes process.env.NODE_ENV="production" into the Worker bundle.  
    */
   NODE_ENV?: "development" | "production" | "test";
   
   /**
    * **DATABASE_URL**  
-   * libSQL URL of the events database the scraper writes and the dev API reads.  
-   * `file:../../local.db` = the repo root's local.db.  
+   * The events database the scraper writes and the dev API reads: a SQLite file  
+   * (libSQL is only the driver). `file:../../local.db` = the repo root's  
+   * local.db. Production events live in Cloudflare D1, mirrored from this file by  
+   * `db:publish`.  
    */
   DATABASE_URL: string;
-  
-  /**
-   * **TURSO_AUTH_TOKEN** 🔐 _sensitive_  
-   * EVENTS database (not the auth database; that one is AUTH_TURSO_TOKEN).  
-   * Token for the events client when DATABASE_URL is a remote libSQL URL. Not  
-   * needed for `file:` URLs. The web build no longer reads it: it reads D1  
-   * (D1_READ_API_TOKEN).  
-   */
-  TURSO_AUTH_TOKEN?: string;
   
   /**
    * **CORS_ORIGIN**  
@@ -81,18 +79,33 @@ export type CoercedEnvSchema = {
   D1_RW_API_TOKEN?: string;
   
   /**
-   * **VERCEL_DEPLOY_HOOK_URL** 🔐 _sensitive_  
-   * Vercel deploy hook db:publish POSTs after D1 commits, so new events reach  
-   * the static site. Without it the site keeps serving its last build. Vercel:  
-   * Project > Settings > Git > Deploy Hooks. Anyone with it can trigger builds.  
+   * **DEPLOY_HOOK_URL** 🔐 _sensitive_  
+   * Workers Builds deploy hook db:publish POSTs after D1 commits, so new events  
+   * reach the static site. Without it the site keeps serving its last build.  
+   * Workers & Pages > findleiria > Settings > Build > Deploy Hooks (the URL is  
+   * https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/<id>; it  
+   * needs no other credential). Anyone with it can trigger builds.  
    */
-  VERCEL_DEPLOY_HOOK_URL?: string;
+  DEPLOY_HOOK_URL?: string;
+  
+  /**
+   * **SITE_URL**  
+   * Public origin of the deployed site, no path (e.g. https://findleiria.pt). The  
+   * prerender writes it into canonical and og:url tags, JSON-LD, the sitemap,  
+   * robots.txt and the host printed on each OG card. Required by the production  
+   * build (the prerender stops without it); `pnpm dev` and `snapshot` do not use  
+   * it. No default on purpose: a guessed origin would ship wrong canonical URLs,  
+   * so it is checked where it is used (apps/web/scripts/snapshot-lib.mjs), not  
+   * marked @required here, which would break every local `varlock run`.  
+   */
+  SITE_URL?: string;
   
   /**
    * **SNAPSHOT_DATABASE_URL**  
    * The database `pnpm dev` / `pnpm --filter web snapshot` reads (defaults to the  
-   * repo's local.db). A `file:` URL here also makes `pnpm --filter web build`  
-   * read that SQLite file instead of D1.  
+   * repo's local.db). Also makes `pnpm --filter web build` read that SQLite file  
+   * instead of D1, for a local build. Refused on Workers Builds (WORKERS_CI): a  
+   * deployed build always reads D1.  
    */
   SNAPSHOT_DATABASE_URL?: string;
   
@@ -134,22 +147,16 @@ export type CoercedEnvSchema = {
   
   /**
    * **AUTH_DATABASE_URL**  
-   * Dev/test only: libSQL URL of the auth database, a `file:` path (Bun dev server,  
-   * tests, drizzle-kit). Production runs on Cloudflare D1 through the `AUTH_DB`  
-   * binding (wrangler.jsonc), so this is neither required nor read there.  
+   * Dev/test only: the auth database as a SQLite file (Bun dev server, tests,  
+   * drizzle-kit). Production runs on Cloudflare D1 through the `AUTH_DB` binding  
+   * (wrangler.jsonc), so this is neither required nor read there.  
    */
   AUTH_DATABASE_URL?: string;
   
   /**
-   * **AUTH_TURSO_TOKEN** 🔐 _sensitive_  
-   * Dev only: token for a remote libSQL AUTH_DATABASE_URL (not the events  
-   * database, whose token is TURSO_AUTH_TOKEN). Not read in production.  
-   */
-  AUTH_TURSO_TOKEN?: string;
-  
-  /**
    * **BETTER_AUTH_SECRET** 🔐 _sensitive_  
-   * Signs session cookies. 32+ chars; rotating it signs everyone out.  
+   * Signs session cookies. 32+ chars; rotating it signs everyone out. A Worker  
+   * secret (`secrets.required` in wrangler.jsonc).  
    * Generate with: openssl rand -base64 48  
    */
   BETTER_AUTH_SECRET: string;
@@ -157,14 +164,15 @@ export type CoercedEnvSchema = {
   /**
    * **BETTER_AUTH_URL**  
    * Public origin of the app. Callback URLs and the trusted-origin list are built  
-   * from it, so it must be exactly what the browser types.  
+   * from it, so it must be exactly what the browser types. A Worker var.  
    */
   BETTER_AUTH_URL: string;
   
   /**
    * **AUTH_TRUSTED_ORIGINS**  
    * Extra trusted origins, comma-separated. Loopback aliases are already added  
-   * outside production; use this for LAN addresses and Vercel previews.  
+   * outside production; use this for LAN addresses and preview deployment origins.  
+   * A Worker var.  
    */
   AUTH_TRUSTED_ORIGINS?: string;
   
@@ -172,23 +180,29 @@ export type CoercedEnvSchema = {
    * **GOOGLE_CLIENT_ID**  
    * Google OAuth client (Google Cloud Console > APIs & Services > Credentials).  
    * Authorized redirect URI: <BETTER_AUTH_URL>/api/auth/callback/google  
+   * Not sensitive in itself (it appears in the sign-in redirect), but a Worker  
+   * secret like the client secret, so a deploy without it fails.  
    */
   GOOGLE_CLIENT_ID: string;
   
-  /** **GOOGLE_CLIENT_SECRET** 🔐 _sensitive_ */
+  /**
+   * **GOOGLE_CLIENT_SECRET** 🔐 _sensitive_  
+   * A Worker secret (`secrets.required` in wrangler.jsonc).  
+   */
   GOOGLE_CLIENT_SECRET: string;
   
   /**
    * **MAIL_FROM**  
    * Sender of the verification mail (Cloudflare Email Sending, `send_email`  
-   * binding). The domain must be onboarded to Email Sending. Required when  
-   * instead of sent.  
+   * binding). The domain must be onboarded to Email Sending. A Worker var, always  
+   * required there. Locally it is required only when NODE_ENV=production;  
+   * elsewhere the verification link is printed to the console instead of sent.  
    */
   MAIL_FROM?: string;
   
 };
 
-type _CoercedEnvSchema_397d2aa1 = CoercedEnvSchema;
+type _CoercedEnvSchema_e7117baf = CoercedEnvSchema;
 
 export type EnvSchemaAsStrings = {
   [Property in keyof CoercedEnvSchema]:
@@ -196,11 +210,4 @@ export type EnvSchemaAsStrings = {
       : (NonNullable<CoercedEnvSchema[Property]> extends boolean ? ('true' | 'false') : string)
 };
 
-type _EnvSchemaAsStrings_397d2aa1 = EnvSchemaAsStrings;
-declare global {
-
-  // add types for global process.env
-  namespace NodeJS {
-    interface ProcessEnv extends _EnvSchemaAsStrings_397d2aa1 {}
-  }
-}
+type _EnvSchemaAsStrings_e7117baf = EnvSchemaAsStrings;

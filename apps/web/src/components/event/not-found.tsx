@@ -4,8 +4,8 @@ import { SHELL_DESCRIPTION, useDocumentMeta } from "@/hooks/use-document-meta";
 /**
  * Shown for a slug we do not have.
  *
- * Vercel answers an unknown `/evento/...` with the SPA shell, so the status is
- * a 200; the `noindex` tag is what stops a dead slug from being indexed as a
+ * The Worker's static assets answer an unknown `/evento/...` with the SPA shell
+ * (`not_found_handling: "single-page-application"`), so the status is a 200; the `noindex` tag is what stops a dead slug from being indexed as a
  * thin page.
  */
 export function EventNotFound() {

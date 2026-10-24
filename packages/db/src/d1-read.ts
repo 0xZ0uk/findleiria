@@ -110,6 +110,9 @@ export type D1ReadOptions = {
 	/** For tests: a fake server. Defaults to the Cloudflare API. */
 	baseUrl?: string;
 	fetch?: typeof fetch;
+	/** For tests: replace the real wait and jitter of the 429/5xx retries. */
+	sleep?: (ms: number) => Promise<void>;
+	random?: () => number;
 };
 
 /**

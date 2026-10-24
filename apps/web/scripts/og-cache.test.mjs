@@ -98,6 +98,21 @@ test("the template fingerprint changes when a template file does", () => {
 	expect(templateFingerprint([file])).not.toBe(one);
 });
 
+test("the site host is part of the template fingerprint and so of every key", () => {
+	const file = path.join(root, "template.js");
+	fs.mkdirSync(root, { recursive: true });
+	fs.writeFileSync(file, "v1");
+	const here = templateFingerprint([file], "findleiria.pt");
+	expect(templateFingerprint([file], "findleiria.pt")).toBe(here);
+	expect(templateFingerprint([file], "example.workers.dev")).not.toBe(here);
+	expect(templateFingerprint([file])).not.toBe(here);
+
+	const card = { title: "Fado", dayLabel: "1 jan 2027", venueLabel: "Teatro" };
+	expect(cardKey(card, here)).not.toBe(
+		cardKey(card, templateFingerprint([file], "example.workers.dev")),
+	);
+});
+
 test("a cold build creates the cache and renders every card", async () => {
 	const { calls, render } = counting();
 	const stats = await run([event("a"), event("b")], render);

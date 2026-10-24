@@ -9,7 +9,7 @@ import type { Conn } from "./conn";
  * `event_sources.event_id` declares ON DELETE CASCADE, but the local SQLite
  * connection runs with foreign keys off (the libsql client never turns
  * `PRAGMA foreign_keys` on), so the cascade never fires: every event delete
- * stranded its attribution rows — 31 orphans by the time the Turso publish
+ * stranded its attribution rows — 31 orphans by the time the D1 publish
  * failed its FK check. Deleting dependents explicitly gives the intended
  * result without depending on a pragma.
  */

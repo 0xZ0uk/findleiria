@@ -41,7 +41,7 @@
  *
  * The site does not read D1 at runtime: its build turns D1 into a static
  * JSON snapshot. So a publish only reaches readers once the site rebuilds,
- * and when `VERCEL_DEPLOY_HOOK_URL` is set this run asks for that rebuild
+ * and when `DEPLOY_HOOK_URL` is set this run asks for that rebuild
  * after the swap has committed. A failed hook exits non-zero (the data is
  * safe in D1; the site is just still serving the previous build).
  *
@@ -60,7 +60,11 @@ import { Database } from "bun:sqlite";
 
 import { MIGRATE_HINT, mirrorToD1, POST_PUBLISH_QUERY } from "./d1-mirror";
 import { createD1Query } from "./d1-rest";
-import { pruneScrapeRuns, SCRAPE_RUNS_RETENTION_DAYS } from "./publish-lib";
+import {
+	parseDeployHookResponse,
+	pruneScrapeRuns,
+	SCRAPE_RUNS_RETENTION_DAYS,
+} from "./publish-lib";
 
 const databaseUrl = process.env.DATABASE_URL ?? "";
 const localPath = databaseUrl.replace(/^file:/, "");
@@ -141,7 +145,7 @@ if (!countsMatch) {
 }
 
 /**
- * Ask Vercel to rebuild, which is what turns the new rows into pages: the
+ * Ask Workers Builds to rebuild (a deploy hook), which is what turns the new rows into pages: the
  * agenda snapshot, `/evento/<slug>` pages, OG cards and the sitemap are all
  * written at build time. Runs only after the swap has committed, so a hook
  * failure can never leave a half-published database.
@@ -154,7 +158,7 @@ async function triggerRedeploy(hookUrl: string): Promise<boolean> {
 		host = new URL(hookUrl).host;
 	} catch {
 		console.error(
-			"!!! VERCEL_DEPLOY_HOOK_URL is not a valid URL; no redeploy was triggered.",
+			"!!! DEPLOY_HOOK_URL is not a valid URL; no redeploy was triggered.",
 		);
 		return false;
 	}
@@ -170,18 +174,13 @@ async function triggerRedeploy(hookUrl: string): Promise<boolean> {
 			);
 			return false;
 		}
-		let job = "";
-		try {
-			const parsed = JSON.parse(body) as {
-				job?: { id?: string; state?: string };
-			};
-			if (parsed.job?.id) {
-				job = ` (job ${parsed.job.id}, ${parsed.job.state ?? "queued"})`;
-			}
-		} catch {
-			// Vercel answers JSON; any other 2xx body still means it was accepted.
-		}
-		console.log(`redeploy requested from ${host}${job}`);
+		// Workers Builds answers `{ result: { build_uuid, … } }`; any other 2xx
+		// body still means it was accepted.
+		const { buildUuid, alreadyQueued } = parseDeployHookResponse(body);
+		const build = buildUuid
+			? ` (build ${buildUuid}${alreadyQueued ? ", already queued" : ""})`
+			: "";
+		console.log(`redeploy requested from ${host}${build}`);
 		return true;
 	} catch (err) {
 		console.error(`!!! Redeploy hook FAILED: could not reach ${host}:`, err);
@@ -189,10 +188,10 @@ async function triggerRedeploy(hookUrl: string): Promise<boolean> {
 	}
 }
 
-const hookUrl = process.env.VERCEL_DEPLOY_HOOK_URL;
+const hookUrl = process.env.DEPLOY_HOOK_URL;
 if (!hookUrl) {
 	console.log(
-		"VERCEL_DEPLOY_HOOK_URL not set: D1 is updated, but the site keeps serving its last build until it is redeployed.",
+		"DEPLOY_HOOK_URL not set: D1 is updated, but the site keeps serving its last build until it is redeployed.",
 	);
 	process.exit(countsMatch ? 0 : 1);
 }
