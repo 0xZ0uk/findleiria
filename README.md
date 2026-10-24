@@ -63,7 +63,7 @@ How it is wired:
 - Moving from the old per-app files: merge `apps/server/.env`,
   `apps/web/.env` and `packages/db/.env` into the root `.env.local`, then
   delete them (they are no longer read). `TURSO_AUTH_TOKEN` is the
-  **read-only** token; the publish token is `TURSO_RW_TOKEN`.
+  **read-only** token; publishing uses the D1-edit token `D1_RW_API_TOKEN`.
 - Secrets can be kept encrypted at rest: set a value to `varlock(prompt)` in
   `.env.local` and run `pnpm env:check` (see varlock's local encryption docs).
 - The varlock CLI sends anonymous usage telemetry; opt out once with
@@ -171,7 +171,7 @@ DIGEST_KEYWORDS="..." pnpm --filter server digest -- --new 24   # 09:00, pipe to
 
 `daily` (`apps/server/src/scraper/daily.ts`) runs every source in turn, then
 the cleanup passes (purge, venue merge, reconcile) once, then `db:publish`
-(mirror `local.db` into Turso + Vercel deploy hook), then prints a summary.
+(mirror `local.db` into D1 + Vercel deploy hook), then prints a summary.
 
 - One failed source never stops the others.
 - Publish is **skipped** when the batch failed hard: a cleanup pass threw, or
@@ -194,20 +194,29 @@ pages fetched / new / updated / pruned / failed, plus `error`, `warnings`
 Go through the package scripts (they wrap `varlock run`): a bare
 `bun src/...` gets no env, since Bun's own `.env` loading is off.
 
-**One-time Turso migration.** The publish mirrors every local column, and the
-site's build reads all of them, so Turso has to be migrated as far as
-`local.db`. After pulling migrations `0003` (`event_sources.last_seen_at`,
-`event_aliases`) and `0004` (the `scrape_runs` outcome columns), run this once
-from the repo root with the **read/write** token:
+**D1 migrations.** The publish mirrors every local column into the
+`findleiria-events` D1 database, and the site's build reads all of them, so D1
+has to be migrated as far as `local.db`. Apply the same committed drizzle
+migrations (`packages/db/src/migrations`, wired by `packages/db/wrangler.jsonc`)
+whenever new ones land, from the repo root:
 
 ```bash
-DATABASE_URL='libsql://<db>-<org>.turso.io' TURSO_AUTH_TOKEN='<TURSO_RW_TOKEN>' \
-  pnpm --filter @events-tracker/db db:migrate
+pnpm --filter @events-tracker/db db:migrate:remote   # wrangler d1 migrations apply findleiria-events --remote
 ```
 
-Values set on the command line win over `.env.local` under `varlock run`.
-`db:publish` refuses to run (and prints this command) while Turso lacks a
-column.
+It uses your `wrangler login`, or `CLOUDFLARE_API_TOKEN=<D1_RW_API_TOKEN>`
+(with `CLOUDFLARE_ACCOUNT_ID` from `.env.local`). `db:publish` refuses to run
+(and prints this command) while D1 lacks a table, column or index.
+
+**How the publish stays atomic.** D1's REST API has no `BEGIN`/`COMMIT`, so
+`db:publish` (`packages/db/src/publish-d1.ts`) loads the rows into
+`<table>_next` staging tables over as many requests as needed, then swaps them
+in with **one** request (check the staged counts, drop the live tables, rename
+the staging ones, rebuild the indexes). D1 runs a multi-statement request as
+one transaction, so the site's build sees the whole old copy or the whole new
+one. A failure before the swap leaves the live tables untouched; leftover
+`_next` tables are dropped by the next run. It also refuses local rows whose
+foreign key points at nothing, since D1 enforces foreign keys.
 
 ### 8. Tests & checks
 
@@ -244,7 +253,8 @@ everything the site serves into `apps/web/dist/`:
   request-free first paint), `og/<slug>.png`, `sitemap.xml`
 
 The daily flow (`pnpm --filter server daily`, see Cron automation) is scrape →
-`db:publish` (mirrors `local.db` into Turso) → deploy hook → Vercel rebuild. There is no Hono process in production; the local
+`db:publish` (mirrors `local.db` into D1; mid-migration, the build below still
+reads Turso until it is switched to D1) → deploy hook → Vercel rebuild. There is no Hono process in production; the local
 scraper is the only writer.
 
 ```bash
@@ -312,9 +322,10 @@ Redeploy after publish (otherwise events scraped since the last deploy have no
 page, card or sitemap entry): in Vercel, **Settings → Git → Deploy Hooks**,
 create a hook for the production branch, and set it as
 `VERCEL_DEPLOY_HOOK_URL` in the root `.env.local` on the machine that runs the
-cron, next to `TURSO_DATABASE_URL` and the read/write `TURSO_RW_TOKEN` (see
-the `#db` items in `.env.schema`). `db:publish` POSTs to it only after Turso
-has committed, and exits non-zero if the hook fails.
+cron, next to `CLOUDFLARE_ACCOUNT_ID`, `EVENTS_D1_ID` and the D1-edit
+`D1_RW_API_TOKEN` (see the `#db` items in `.env.schema`). `db:publish` POSTs
+to it only after the D1 swap has committed, and exits non-zero if the hook
+fails.
 
 ## Stack
 

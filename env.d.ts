@@ -22,6 +22,7 @@ export type CoercedEnvSchema = {
   
   /**
    * **TURSO_AUTH_TOKEN** 🔐 _sensitive_  
+   * EVENTS database (not the auth database; that one is AUTH_TURSO_TOKEN).  
    * Turso READ-ONLY token. Two consumers: the web build (the token for  
    * TURSO_DATABASE_URL) and the events client when DATABASE_URL is remote. Not  
    * needed for `file:` URLs.  
@@ -57,23 +58,38 @@ export type CoercedEnvSchema = {
   
   /**
    * **TURSO_DATABASE_URL** 🔐 _sensitive_  
-   * The Turso database the site's build reads. Required by the web build and by  
-   * db:publish (both check and fail with a clear message); unused in dev.  
+   * The Turso database the site's build reads. Required by the web build (it  
+   * checks and fails with a clear message); unused in dev.  
    * `file:/abs/path/local.db` (no token) builds against a local database.  
    * Sensitive so it is redacted and can never be inlined into the client bundle.  
    */
   TURSO_DATABASE_URL?: string;
   
   /**
-   * **TURSO_RW_TOKEN** 🔐 _sensitive_  
-   * Turso READ/WRITE token, for db:publish only. The read-only token is  
-   * TURSO_AUTH_TOKEN (falls back to it for a single-token setup).  
+   * **CLOUDFLARE_ACCOUNT_ID**  
+   * Cloudflare account that owns the `findleiria-events` D1 database  
+   * (dashboard URL, or `wrangler whoami`). db:publish needs it; wrangler reads  
+   * it too (`db:migrate:remote`).  
    */
-  TURSO_RW_TOKEN?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  
+  /**
+   * **EVENTS_D1_ID**  
+   * Id (uuid) of the `findleiria-events` D1 database db:publish mirrors local.db  
+   * into (`wrangler d1 info findleiria-events`).  
+   */
+  EVENTS_D1_ID?: string;
+  
+  /**
+   * **D1_RW_API_TOKEN** 🔐 _sensitive_  
+   * Cloudflare API token with D1 EDIT permission, for db:publish only (keep it on  
+   * the cron machine). The build gets a separate read-only D1 token.  
+   */
+  D1_RW_API_TOKEN?: string;
   
   /**
    * **VERCEL_DEPLOY_HOOK_URL** 🔐 _sensitive_  
-   * Vercel deploy hook db:publish POSTs after Turso commits, so new events reach  
+   * Vercel deploy hook db:publish POSTs after D1 commits, so new events reach  
    * the static site. Without it the site keeps serving its last build. Vercel:  
    * Project > Settings > Git > Deploy Hooks. Anyone with it can trigger builds.  
    */
@@ -104,7 +120,9 @@ export type CoercedEnvSchema = {
   
   /**
    * **AUTH_TURSO_TOKEN** 🔐 _sensitive_  
-   * Read/write token. Only needed when AUTH_DATABASE_URL is a remote Turso database.  
+   * AUTH database (users, sessions, saved events; not the events database, whose  
+   * token is TURSO_AUTH_TOKEN). Read/write token for AUTH_DATABASE_URL. Only  
+   * needed when AUTH_DATABASE_URL is a remote Turso database.  
    */
   AUTH_TURSO_TOKEN?: string;
   
@@ -172,7 +190,7 @@ export type CoercedEnvSchema = {
   
 };
 
-type _CoercedEnvSchema_aca46f6d = CoercedEnvSchema;
+type _CoercedEnvSchema_8591a6ec = CoercedEnvSchema;
 
 export type EnvSchemaAsStrings = {
   [Property in keyof CoercedEnvSchema]:
@@ -180,11 +198,11 @@ export type EnvSchemaAsStrings = {
       : (NonNullable<CoercedEnvSchema[Property]> extends boolean ? ('true' | 'false') : string)
 };
 
-type _EnvSchemaAsStrings_aca46f6d = EnvSchemaAsStrings;
+type _EnvSchemaAsStrings_8591a6ec = EnvSchemaAsStrings;
 declare global {
 
   // add types for global process.env
   namespace NodeJS {
-    interface ProcessEnv extends _EnvSchemaAsStrings_aca46f6d {}
+    interface ProcessEnv extends _EnvSchemaAsStrings_8591a6ec {}
   }
 }

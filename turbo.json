@@ -29,6 +29,10 @@
 			"cache": false,
 			"interactive": true
 		},
+		"db:migrate:remote": {
+			"cache": false,
+			"interactive": true
+		},
 		"db:studio": {
 			"cache": false,
 			"persistent": true
