@@ -47,6 +47,8 @@ export async function reconcileIdentities(conn: Conn = db): Promise<number> {
 			start_at: schema.events.start_at,
 			end_at: schema.events.end_at,
 			categories: schema.events.categories,
+			is_free: schema.events.is_free,
+			featured_at: schema.events.featured_at,
 			fingerprint: schema.events.fingerprint,
 			venue: schema.venues.name,
 			city: schema.venues.city,
@@ -221,6 +223,20 @@ export async function reconcileIdentities(conn: Conn = db): Promise<number> {
 		// except an end the merge itself implies (day pages of one item).
 		for (const k of keepers) {
 			const end = plan.endByKeeper?.get(k.id);
+			// What the absorbed rows knew that the keeper does not: a known
+			// free/paid flag, and a hand-picked week's pick (never lost to a merge).
+			const absorbedHere = absorbedRows.filter(
+				(r) => plan.absorbed.get(r.id) === k.id,
+			);
+			const isFree =
+				k.is_free == null
+					? (absorbedHere.find((r) => r.is_free != null)?.is_free ?? null)
+					: null;
+			const featuredAt =
+				k.featured_at == null
+					? (absorbedHere.find((r) => r.featured_at != null)?.featured_at ??
+						null)
+					: null;
 			await conn
 				.update(schema.events)
 				.set({
@@ -228,6 +244,9 @@ export async function reconcileIdentities(conn: Conn = db): Promise<number> {
 					// Town-qualified like ingest's (C3), from the keeper's venue.
 					fingerprint: fingerprint(k.title, k.venue ?? "", k.start_at, k.city),
 					...(end != null && end !== k.end_at ? { end_at: end } : {}),
+					// Only ever fills a blank, so a stale read cannot clear a value.
+					...(isFree != null ? { is_free: isFree } : {}),
+					...(featuredAt != null ? { featured_at: featuredAt } : {}),
 					updated_at: now,
 				})
 				.where(eq(schema.events.id, k.id));

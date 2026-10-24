@@ -100,6 +100,52 @@ export function plainText(html: string): string {
 		.trim();
 }
 
+const FREE_PHRASE =
+	/\b(?:entrada\s+(?:livre|gratuita|gratis)|acesso\s+(?:livre|gratuito)|gratuit[oa]s?|gratis|free\s+(?:entry|admission))\b/g;
+/** Within a few words before a free phrase: it is negated ("não é gratuito"). */
+const FREE_NEGATED = /\b(?:nao|nem|sem|deixa|deixou)\b/;
+/** Within a few words before: the free thing is an extra, not the ticket. */
+const FREE_EXTRA =
+	/\b(?:estacionamento|parqueamento|parking|wifi|wi-fi|transportes?|autocarros?|bebidas?|brindes?)\b/;
+/** After the phrase, in the same sentence: free for some people only. */
+const FREE_PARTIAL =
+	/\b(?:para|ate|menores|criancas|socios|residentes|maiores|seniores)\b/;
+const FREE_FOR_ALL = /^\s*para\s+(?:todos|todas|o\s+publico|publico|quem)\b/;
+
+/**
+ * Free entry, read off Portuguese prose: true on "entrada livre", "entrada
+ * gratuita", "gratuito", "grátis", "acesso livre", "free entry" (case and
+ * diacritic insensitive, word-bounded), null otherwise. NEVER false: text can
+ * say an event is free but never that it costs, so "paid" only comes from
+ * structured signals. Phrases that do not make the whole event free are
+ * skipped: negated ("não é gratuito"), a free extra ("estacionamento
+ * gratuito"), or free for some only ("gratuito para menores de 6 anos").
+ */
+export function detectFree(text: string | null | undefined): boolean | null {
+	if (!text) return null;
+	const norm = text
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase();
+	for (const m of norm.matchAll(FREE_PHRASE)) {
+		const at = m.index ?? 0;
+		const lead = (
+			norm
+				.slice(Math.max(0, at - 40), at)
+				.split(/[.;!?\n]/)
+				.pop() ?? ""
+		)
+			.split(/\s+/)
+			.slice(-4)
+			.join(" ");
+		if (FREE_NEGATED.test(lead) || FREE_EXTRA.test(lead)) continue;
+		const after = norm.slice(at + m[0].length).split(/[.;!?\n]/)[0] ?? "";
+		if (FREE_PARTIAL.test(after) && !FREE_FOR_ALL.test(after)) continue;
+		return true;
+	}
+	return null;
+}
+
 /** Lowercase, strip diacritics (NFD), strip punctuation, collapse whitespace. */
 export function normalizeTitle(input: string): string {
 	return input
