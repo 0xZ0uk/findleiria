@@ -21,9 +21,6 @@
  */
 const read = (value: string | undefined) => (value === "" ? undefined : value);
 
-/** varlock's `@type=boolean` spellings of true; the rest it accepts are false. */
-const TRUE = new Set(["t", "true", "yes", "on", "1"]);
-
 type NodeEnv = "development" | "production" | "test";
 
 export const authEnv = {
@@ -41,16 +38,10 @@ export const authEnv = {
 	AUTH_TRUSTED_ORIGINS: read(process.env.AUTH_TRUSTED_ORIGINS),
 	GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
 	GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
-	// Outgoing mail (email verification). When unset outside production the
-	// mailer prints the message instead of sending it.
-	SMTP_HOST: read(process.env.SMTP_HOST),
-	SMTP_PORT: Number(read(process.env.SMTP_PORT) ?? 587),
-	// true = implicit TLS (port 465). false = plain, upgraded by STARTTLS (587).
-	SMTP_SECURE: TRUE.has(read(process.env.SMTP_SECURE)?.toLowerCase() ?? ""),
-	SMTP_USER: read(process.env.SMTP_USER),
-	SMTP_PASS: read(process.env.SMTP_PASS),
-	// Sender, e.g. "FindLeiria <no-reply@example.com>".
-	SMTP_FROM: read(process.env.SMTP_FROM),
+	// Sender of the verification mail, e.g. "FindLeiria <no-reply@findleiria.pt>",
+	// on a domain onboarded to Cloudflare Email Sending. Only the Worker's mail
+	// transport reads it; the local one just prints the message.
+	MAIL_FROM: read(process.env.MAIL_FROM),
 	NODE_ENV: (read(process.env.NODE_ENV) ?? "development") as NodeEnv,
 };
 

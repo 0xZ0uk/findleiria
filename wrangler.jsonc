@@ -44,7 +44,17 @@
 		}
 	],
 
-	// Verification mail. Sending needs a domain onboarded to Cloudflare Email.
+	// Verification mail (Cloudflare Email Sending; Workers Paid). The sender
+	// (MAIL_FROM) must be on a domain onboarded under Compute > Email Service >
+	// Email Sending, which needs Cloudflare DNS.
+	// Deliberately no `destination_address`, `allowed_destination_addresses` or
+	// `allowed_sender_addresses`: the mail goes to whoever signs up, and any of
+	// those would make send() throw E_RECIPIENT_NOT_ALLOWED for everyone else.
+	// Unrestricted means "any verified destination in the account"; keeping
+	// `from` on one address is MAIL_FROM's job.
+	// Local `wrangler dev` simulates this binding: nothing is delivered, the
+	// message is logged and its bodies saved to local files. Add `"remote": true`
+	// temporarily to send real mail from a local Worker (to test addresses only).
 	"send_email": [{ "name": "EMAIL" }],
 
 	// Custom events from POST /api/track.

@@ -160,39 +160,16 @@ export type CoercedEnvSchema = {
   GOOGLE_CLIENT_SECRET: string;
   
   /**
-   * **SMTP_HOST**  
-   * Outgoing mail for email verification (SMTP via nodemailer). Required when  
-   * printed to the console instead of sent.  
+   * **MAIL_FROM**  
+   * Sender of the verification mail (Cloudflare Email Sending, `send_email`  
+   * binding). The domain must be onboarded to Email Sending. Required when  
+   * instead of sent.  
    */
-  SMTP_HOST?: string;
-  
-  /**
-   * **SMTP_PORT**  
-   * 587 + SMTP_SECURE=false uses STARTTLS; 465 + SMTP_SECURE=true is implicit TLS.  
-   */
-  SMTP_PORT?: number;
-  
-  /**
-   * **SMTP_SECURE**  
-   * "true" = implicit TLS (port 465). "false" = plain, upgraded by STARTTLS (587).  
-   */
-  SMTP_SECURE?: boolean;
-  
-  /** **SMTP_USER** */
-  SMTP_USER?: string;
-  
-  /** **SMTP_PASS** 🔐 _sensitive_ */
-  SMTP_PASS?: string;
-  
-  /**
-   * **SMTP_FROM**  
-   * Sender address.  
-   */
-  SMTP_FROM?: string;
+  MAIL_FROM?: string;
   
 };
 
-type _CoercedEnvSchema_a85e1af2 = CoercedEnvSchema;
+type _CoercedEnvSchema_f4e6c767 = CoercedEnvSchema;
 
 export type EnvSchemaAsStrings = {
   [Property in keyof CoercedEnvSchema]:
@@ -200,11 +177,11 @@ export type EnvSchemaAsStrings = {
       : (NonNullable<CoercedEnvSchema[Property]> extends boolean ? ('true' | 'false') : string)
 };
 
-type _EnvSchemaAsStrings_a85e1af2 = EnvSchemaAsStrings;
+type _EnvSchemaAsStrings_f4e6c767 = EnvSchemaAsStrings;
 declare global {
 
   // add types for global process.env
   namespace NodeJS {
-    interface ProcessEnv extends _EnvSchemaAsStrings_a85e1af2 {}
+    interface ProcessEnv extends _EnvSchemaAsStrings_f4e6c767 {}
   }
 }

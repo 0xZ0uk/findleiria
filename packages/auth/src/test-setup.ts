@@ -26,17 +26,8 @@ process.env.BETTER_AUTH_SECRET = "test-secret-long-enough-to-sign-cookies";
 process.env.BETTER_AUTH_URL = "http://localhost:3300";
 process.env.GOOGLE_CLIENT_ID = "google-client-id-test";
 process.env.GOOGLE_CLIENT_SECRET = "google-client-secret-test";
-// No SMTP: the default mailer only logs, nothing can be sent for real.
-for (const name of [
-	"SMTP_HOST",
-	"SMTP_PORT",
-	"SMTP_SECURE",
-	"SMTP_USER",
-	"SMTP_PASS",
-	"SMTP_FROM",
-]) {
-	process.env[name] = "";
-}
+// No sender: the bun mailer transport only logs, nothing can be sent for real.
+process.env.MAIL_FROM = "";
 
 const { authDb } = await import("./db");
 const { migrate } = await import("drizzle-orm/libsql/migrator");

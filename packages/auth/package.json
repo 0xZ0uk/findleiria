@@ -21,6 +21,12 @@
 			"workerd": "./src/auth-db.workerd.ts",
 			"bun": "./src/auth-db.node.ts",
 			"default": "./src/auth-db.workerd.ts"
+		},
+		"#mailer-transport": {
+			"types": "./src/mailer-transport.types.ts",
+			"workerd": "./src/mailer-transport.workerd.ts",
+			"bun": "./src/mailer-transport.node.ts",
+			"default": "./src/mailer-transport.workerd.ts"
 		}
 	},
 	"scripts": {
@@ -45,14 +51,12 @@
 		"@libsql/client": "0.17.4",
 		"better-auth": "1.7.4",
 		"drizzle-orm": "^0.45.2",
-		"hono": "catalog:",
-		"nodemailer": "^10.2.1"
+		"hono": "catalog:"
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "^5.20261024.1",
 		"@events-tracker/config": "workspace:*",
 		"@types/bun": "catalog:",
-		"@types/nodemailer": "^8.0.2",
 		"drizzle-kit": "^0.31.10",
 		"typescript": "catalog:",
 		"varlock": "^1.23.0"
