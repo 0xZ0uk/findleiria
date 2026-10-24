@@ -3,29 +3,26 @@ import { useEffect } from "react";
 /**
  * Cookieless analytics, off unless configured.
  *
- * Both values are build-time env vars: without them the app ships no
- * third-party script at all, so local dev and any fork stay clean. Set
- * VITE_UMAMI_SRC (the script URL) and VITE_UMAMI_WEBSITE_ID (the site id) to
- * turn it on — self-hosted Umami, no cookies, so no consent banner.
+ * Page views come from Cloudflare Web Analytics; custom events go to the
+ * Worker's `POST /api/track` (Workers Analytics Engine). The token is a
+ * build-time env var: without it the app ships no third-party script and sends
+ * no events, so local dev and any fork stay clean. Set VITE_CF_BEACON_TOKEN
+ * (the site token from the Web Analytics dashboard) to turn it on: no
+ * cookies, so no consent banner.
  */
-const SRC = import.meta.env.VITE_UMAMI_SRC;
-const WEBSITE_ID = import.meta.env.VITE_UMAMI_WEBSITE_ID;
+const TOKEN = import.meta.env.VITE_CF_BEACON_TOKEN;
 
-declare global {
-	interface Window {
-		umami?: { track: (name?: string, data?: Record<string, unknown>) => void };
-	}
-}
+const BEACON_SRC = "https://static.cloudflareinsights.com/beacon.min.js";
 
 export function Analytics() {
 	useEffect(() => {
-		if (!SRC || !WEBSITE_ID) return;
-		if (document.querySelector("script[data-website-id]")) return;
+		if (!TOKEN) return;
+		if (document.querySelector("script[data-cf-beacon]")) return;
 
 		const script = document.createElement("script");
-		script.defer = true;
-		script.src = SRC;
-		script.dataset.websiteId = WEBSITE_ID;
+		script.type = "module";
+		script.src = BEACON_SRC;
+		script.dataset.cfBeacon = JSON.stringify({ token: TOKEN });
 		document.head.append(script);
 	}, []);
 
@@ -33,9 +30,15 @@ export function Analytics() {
 }
 
 /**
- * Fire-and-forget custom event — a no-op when analytics is not configured, so
- * call sites never need to check.
+ * Fire-and-forget custom event: a no-op when analytics is not configured, so
+ * call sites never need to check. The body goes as a JSON Blob so the Worker
+ * sees `Content-Type: application/json` without a CORS preflight.
  */
 export function track(name: string, data?: Record<string, unknown>) {
-	window.umami?.track(name, data);
+	if (!TOKEN || typeof navigator.sendBeacon !== "function") return;
+
+	navigator.sendBeacon(
+		"/api/track",
+		new Blob([JSON.stringify({ name, data })], { type: "application/json" }),
+	);
 }

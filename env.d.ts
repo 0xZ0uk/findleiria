@@ -22,6 +22,7 @@ export type CoercedEnvSchema = {
   
   /**
    * **TURSO_AUTH_TOKEN** 🔐 _sensitive_  
+   * EVENTS database (not the auth database; that one is AUTH_TURSO_TOKEN).  
    * Turso READ-ONLY token. Two consumers: the web build (the token for  
    * TURSO_DATABASE_URL) and the events client when DATABASE_URL is remote. Not  
    * needed for `file:` URLs.  
@@ -87,14 +88,12 @@ export type CoercedEnvSchema = {
   SNAPSHOT_DATABASE_URL?: string;
   
   /**
-   * **VITE_UMAMI_SRC**  
-   * Cookieless Umami analytics, inlined into the browser bundle (public by  
-   * design). Both must be set to load anything; empty ships no third-party script.  
+   * **VITE_CF_BEACON_TOKEN**  
+   * Cloudflare Web Analytics site token (Web Analytics > Manage site), inlined  
+   * into the browser bundle (public by design). Also gates the custom-event  
+   * beacon to /api/track; empty ships no third-party script and sends nothing.  
    */
-  VITE_UMAMI_SRC?: string;
-  
-  /** **VITE_UMAMI_WEBSITE_ID** */
-  VITE_UMAMI_WEBSITE_ID?: string;
+  VITE_CF_BEACON_TOKEN?: string;
   
   /**
    * **AUTH_DATABASE_URL**  
@@ -104,7 +103,9 @@ export type CoercedEnvSchema = {
   
   /**
    * **AUTH_TURSO_TOKEN** 🔐 _sensitive_  
-   * Read/write token. Only needed when AUTH_DATABASE_URL is a remote Turso database.  
+   * AUTH database (users, sessions, saved events; not the events database, whose  
+   * token is TURSO_AUTH_TOKEN). Read/write token for AUTH_DATABASE_URL. Only  
+   * needed when AUTH_DATABASE_URL is a remote Turso database.  
    */
   AUTH_TURSO_TOKEN?: string;
   
@@ -172,7 +173,7 @@ export type CoercedEnvSchema = {
   
 };
 
-type _CoercedEnvSchema_aca46f6d = CoercedEnvSchema;
+type _CoercedEnvSchema_e7b1ba6a = CoercedEnvSchema;
 
 export type EnvSchemaAsStrings = {
   [Property in keyof CoercedEnvSchema]:
@@ -180,11 +181,11 @@ export type EnvSchemaAsStrings = {
       : (NonNullable<CoercedEnvSchema[Property]> extends boolean ? ('true' | 'false') : string)
 };
 
-type _EnvSchemaAsStrings_aca46f6d = EnvSchemaAsStrings;
+type _EnvSchemaAsStrings_e7b1ba6a = EnvSchemaAsStrings;
 declare global {
 
   // add types for global process.env
   namespace NodeJS {
-    interface ProcessEnv extends _EnvSchemaAsStrings_aca46f6d {}
+    interface ProcessEnv extends _EnvSchemaAsStrings_e7b1ba6a {}
   }
 }

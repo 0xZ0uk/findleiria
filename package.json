@@ -9,9 +9,9 @@
 	"scripts": {
 		"dev": "turbo run dev",
 		"build": "turbo run build",
-		"check-types": "turbo run check-types",
-		"typecheck": "turbo run check-types",
-		"test": "turbo run test",
+		"check-types": "turbo run check-types && tsc --noEmit -p worker",
+		"typecheck": "turbo run check-types && tsc --noEmit -p worker",
+		"test": "turbo run test && bun test worker",
 		"lint": "biome ci --error-on-warnings .",
 		"dev:web": "turbo run dev -F web --",
 		"dev:server": "turbo run dev -F server --",
