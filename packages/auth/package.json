@@ -6,13 +6,13 @@
 			"types": "./src/index.ts",
 			"bun": "./src/index.ts",
 			"workerd": "./src/index.ts",
-			"default": "./dist/index.js"
+			"default": "./src/index.ts"
 		},
 		"./*": {
 			"types": "./src/*.ts",
 			"bun": "./src/*.ts",
 			"workerd": "./src/*.ts",
-			"default": "./dist/*.js"
+			"default": "./src/*.ts"
 		}
 	},
 	"imports": {
@@ -30,7 +30,6 @@
 		}
 	},
 	"scripts": {
-		"build": "tsc -p tsconfig.build.json",
 		"env:check:production": "NODE_ENV=production varlock load",
 		"auth:generate": "varlock run -- auth generate --config ./src/auth.ts --output ./src/schema.ts --yes",
 		"db:push": "varlock run -- drizzle-kit push",

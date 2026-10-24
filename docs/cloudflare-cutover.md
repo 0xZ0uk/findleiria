@@ -525,7 +525,7 @@ is no way back.
    ```bash
    turso db list
    turso db destroy findleiria-auth
-   turso db destroy <the events database name>
+   turso db destroy unreal-events   # the events database (README history); confirm with `turso db list`
    ```
 
    Revoke any Turso tokens that remain (`turso auth tokens` lists API tokens;
