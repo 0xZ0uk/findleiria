@@ -327,8 +327,11 @@ pnpm db:migrate:remote                                  # findleiria-events (= p
 The auth tables, including the `rate_limit` table behind sign-in throttling,
 must exist or sign-in fails. `db:publish` refuses to run while the events
 database lacks a table, column or index. Copying the existing users, sessions
-and events over from Turso, and the cutover itself, are not covered here: they
-are the migration runbook (CF-10 of the Cloudflare migration plan).
+and saved events over from Turso, and the cutover itself, are in the step-by-step
+runbook [`docs/cloudflare-cutover.md`](docs/cloudflare-cutover.md). Its data
+step is `pnpm --filter @events-tracker/auth db:export-d1` (a local SQLite copy
+of the Turso auth database into a data-only SQL file for D1) followed by
+`db:verify-d1` (row counts per table, compared with D1).
 
 #### Workers Builds
 
