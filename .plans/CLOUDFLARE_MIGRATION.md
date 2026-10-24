@@ -57,23 +57,34 @@ Verified while planning:
 
 Effort scale: **XS** < 1h · **S** ≈ half a day · **M** ≈ 1 day · **L** 2–3 days · **XL** a week+.
 
-### CF-0: Provision Cloudflare resources (you, or an agent with your `wrangler login`) · **S**
-- Workers Paid; domain onto Cloudflare DNS (if decision 1 = yes).
-- `wrangler d1 create findleiria-events`, `wrangler d1 create findleiria-auth`.
-- `wrangler r2 bucket create findleiria-build-cache` plus an R2 S3 access key
-  pair scoped to that bucket, plus a lifecycle rule deleting objects older than
-  60 days (an `OG_CACHE_VERSION` bump leaves the old prefix behind).
-- API tokens: **D1 read** (build), **D1 edit** (publish, cron machine only).
-- `wrangler email sending enable <domain>`.
-- Web Analytics site (beacon token); Analytics Engine dataset `findleiria_events`.
-- Google OAuth: add `<new origin>/api/auth/callback/google`.
-- Atomicity smoke test on a scratch D1 database (CF-3's publish relies on it):
-  `POST …/d1/database/<id>/query` with `{"sql":"CREATE TABLE t(x); SELECT * FROM missing"}`
-  must fail AND leave no table `t`.
-- Commit the two `database_id`s (not secrets) into `wrangler.jsonc` and
-  `packages/db/wrangler.jsonc`.
-- Output: the IDs and tokens, recorded in `.env.local` / Workers Builds env.
-  Nothing secret is committed.
+### CF-0: Provision Cloudflare resources · **S** (mostly done 2026-10-24, with `cf`)
+Done:
+- Workers Paid: already active on the account.
+- D1 `findleiria-auth` (EU jurisdiction: it holds emails) and
+  `findleiria-events` (WEUR); both migrated; ids committed in `wrangler.jsonc`
+  and `packages/db/wrangler.jsonc`.
+- R2 `findleiria-build-cache` (WEUR) with a lifecycle rule deleting
+  `og-cards/` objects after 180 days (R2 ages from upload, not last use, so a
+  short rule would keep re-rendering live cards; 180 days bounds the leftovers
+  of an `OG_CACHE_VERSION` bump).
+- User API tokens `findleiria-build-d1-read` (D1 Read),
+  `findleiria-publish-d1-write` (D1 Read + Write, cron machine only),
+  `findleiria-build-r2-cache` (bucket-scoped; S3 key id = token id, secret =
+  sha256 of the token value). D1 permissions cannot be scoped to one database:
+  both D1 tokens reach every D1 database in the account.
+- Atomicity smoke test on a scratch D1 database: `CREATE TABLE t(x); SELECT *
+  FROM missing` in one `/query` failed and left no table `t` (scratch deleted).
+- Interim origin while there is no domain:
+  `https://findleiria.pedrsntana.workers.dev`.
+
+Still open:
+- Domain + `wrangler email sending enable <domain>` (no domain yet; see the
+  PR for the interim options).
+- Web Analytics site for the origin (dashboard: the `cf` v0.15 and wrangler
+  OAuth scopes cannot manage RUM sites) → `VITE_CF_BEACON_TOKEN`.
+- Google OAuth: add `<origin>/api/auth/callback/google`.
+- Analytics Engine dataset `findleiria_events`: nothing to do, created on the
+  first write.
 
 ### CF-1: Worker for static hosting + API (replaces `vercel.json` and `api/`) · **M**
 - Add root `wrangler.jsonc`: `main: worker/index.ts`, `compatibility_flags:
