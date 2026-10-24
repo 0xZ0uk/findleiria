@@ -3,8 +3,8 @@
    The tokens are defined here; DESIGN.md at the repo root describes them.
    Single chromatic driver: amber #FF8C00. Sharp corners 0–4px.
    Schibsted Grotesk (display) / Karla (body). Dark-first.
-   NOTE: fonts are imported in apps/web/index.html (a @import here
-   would be non-consecutive after the tailwind base layer).
+   NOTE: fonts are self-hosted via @font-face in apps/web/src/index.css
+   (a @import here would be non-consecutive after the tailwind base layer).
    ============================================================ */
 
 :root {

@@ -1,6 +1,12 @@
 {
 	"extends": "@events-tracker/config/tsconfig.base.json",
-	"exclude": ["src/**/*.test.ts", "node_modules", "dist"],
+	"exclude": [
+		"src/**/*.test.ts",
+		"src/test-helpers.ts",
+		"src/test-setup.ts",
+		"node_modules",
+		"dist"
+	],
 	"compilerOptions": {
 		"composite": true,
 		"outDir": "dist",

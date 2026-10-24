@@ -3,9 +3,13 @@ import * as cheerio from "cheerio";
 import { toEpochInLisbon } from "./fingerprint";
 import { defaultFetchText } from "./http";
 import { createFetchGate } from "./lib/fetch-gate";
+import { lastPageFromHtml } from "./lib/pagination";
 import { monthFromName } from "./lib/pt-dates";
 import { defaultSleep, randomDelay } from "./lib/timing";
 import type { RawEvent } from "./types";
+
+/** A cheerio selection of elements, i.e. what `$("selector")` returns. */
+type CheerioSelection = ReturnType<cheerio.CheerioAPI>;
 
 const SITE = "https://leiriagenda.cm-leiria.pt";
 export const LISTING_URL = `${SITE}/pt/agenda/proximos-eventos`;
@@ -39,7 +43,7 @@ export interface DateParts {
 
 export function parseDateNode(
 	$: cheerio.CheerioAPI,
-	root: cheerio.Cheerio<any>,
+	root: CheerioSelection,
 	kind: "inicio" | "fim",
 ): DateParts | null {
 	// Two listing markup patterns:
@@ -48,7 +52,7 @@ export function parseDateNode(
 	//   B) a plain `.date` block with no wrapper — single-day sessions where the
 	//      time is embedded in a second `.ano` span (e.g. `<span class="ano">18h30</span>`).
 	const wrapped = root.find(`.data-${kind}`).first();
-	let el: cheerio.Cheerio<any>;
+	let el: CheerioSelection;
 	if (wrapped.length > 0) {
 		el = wrapped;
 	} else {
@@ -116,7 +120,7 @@ function imageFromStyle(style: string | undefined): string | null {
 
 function collectCategories(
 	$: cheerio.CheerioAPI,
-	scope: cheerio.Cheerio<any>,
+	scope: CheerioSelection,
 ): string[] {
 	return [
 		...new Set(
@@ -216,10 +220,7 @@ export function mergeCardWithDetail(
 
 /** Total listing pages, discovered from pagination links (page=1..N). */
 export function maxPageFromHtml(html: string): number {
-	const nums = [...html.matchAll(/[?&]page=(\d+)/g)].map((m) =>
-		Number.parseInt(m[1] ?? "0", 10),
-	);
-	return nums.length > 0 ? Math.max(...nums) : 1;
+	return lastPageFromHtml(html, "page") ?? 1;
 }
 
 export interface ScrapeDeps {

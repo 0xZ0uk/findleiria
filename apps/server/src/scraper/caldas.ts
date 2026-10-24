@@ -31,8 +31,9 @@ import type { RawEvent } from "./types";
  *
  * Dates: reconstructed from the card's day/month/'YY straight into Europe/
  * Lisbon wall-clock via toEpochInLisbon — the fields are local, never UTC.
- * Events whose end is already past are dropped (RETRO_TOLERANCE_S), never
- * rolled forward.
+ * Events whose end is already past are dropped, never rolled forward. (The
+ * end is always 23:59 of the end day, so no extra tolerance is needed: ingest
+ * drops the same events.)
  *
  * Scope: everything on the municipal agenda sits in Caldas da Rainha concelho
  * (= Distrito de Leiria), so isInScope gates on the city alias and drops
@@ -48,8 +49,6 @@ export const AGENDA_PATH = "/agenda";
 export const PAGE_SIZE = 12;
 /** Hard cap on listing pages walked (real site: 3 pages, 34 events). */
 export const MAX_LISTING_PAGES = 5;
-/** An event is "live" until one day after its local end. */
-export const RETRO_TOLERANCE_S = 86_400;
 
 export interface CaldasState {
 	seen: string[];
@@ -237,7 +236,7 @@ export function toRawEvent(
 		onMalformed?.(`${card.slug}: campaign date — ${errorMessage(err)}`);
 		return null;
 	}
-	if (endAt < nowUnix - RETRO_TOLERANCE_S) {
+	if (endAt < nowUnix) {
 		return null;
 	}
 	return {

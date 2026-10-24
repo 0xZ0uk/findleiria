@@ -48,6 +48,14 @@ export type CoercedEnvSchema = {
   DIGEST_KEYWORDS?: string;
   
   /**
+   * **SCRAPE_CONCURRENCY**  
+   * How many scraper sources may be in their network phase at once (default 3 when  
+   * unset). Sources hit different hosts and each keeps its own polite delay; the  
+   * database writes stay strictly serial, in registry order. 1 = fully sequential.  
+   */
+  SCRAPE_CONCURRENCY?: number;
+  
+  /**
    * **TURSO_DATABASE_URL** 🔐 _sensitive_  
    * The Turso database the site's build reads. Required by the web build and by  
    * db:publish (both check and fail with a clear message); unused in dev.  
@@ -164,7 +172,7 @@ export type CoercedEnvSchema = {
   
 };
 
-type _CoercedEnvSchema_1be5fda0 = CoercedEnvSchema;
+type _CoercedEnvSchema_aca46f6d = CoercedEnvSchema;
 
 export type EnvSchemaAsStrings = {
   [Property in keyof CoercedEnvSchema]:
@@ -172,11 +180,11 @@ export type EnvSchemaAsStrings = {
       : (NonNullable<CoercedEnvSchema[Property]> extends boolean ? ('true' | 'false') : string)
 };
 
-type _EnvSchemaAsStrings_1be5fda0 = EnvSchemaAsStrings;
+type _EnvSchemaAsStrings_aca46f6d = EnvSchemaAsStrings;
 declare global {
 
   // add types for global process.env
   namespace NodeJS {
-    interface ProcessEnv extends _EnvSchemaAsStrings_1be5fda0 {}
+    interface ProcessEnv extends _EnvSchemaAsStrings_aca46f6d {}
   }
 }

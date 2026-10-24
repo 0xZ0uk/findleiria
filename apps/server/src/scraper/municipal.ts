@@ -3,6 +3,13 @@ import { errorMessage } from "./errors";
 import { toEpochInLisbonOrNull } from "./fingerprint";
 import { defaultFetchText } from "./http";
 import { textOf } from "./lib/html";
+import { lastPageFromHtml } from "./lib/pagination";
+import {
+	giveUpMessage,
+	mergeAttempts,
+	type ParseAttempts,
+	recordParseFailure,
+} from "./lib/parse-attempts";
 import { monthFromPrefix } from "./lib/pt-dates";
 import { defaultSleep, randomDelay } from "./lib/timing";
 import { decodeEntities } from "./normalize";
@@ -69,7 +76,11 @@ export interface MunicipalSite {
 	listing: string;
 	/** wm-smile paginator id, e.g. `events_list_13` */
 	paginator: string | null;
-	/** last listing page observed live (2026-09-11) */
+	/**
+	 * Upper safety cap on listing pages (the last page observed live,
+	 * 2026-09-11). The real count is read from page 1's paginator links; this
+	 * caps it, and stands in when the paginator cannot be read.
+	 */
 	maxPages: number;
 }
 
@@ -142,11 +153,23 @@ export const SITES: MunicipalSite[] = [
 
 /** Safety net on detail fetches per run; unseen urls are retried next run. */
 export const MAX_DETAIL_REQUESTS = 800;
-/** A source date counts as live until one day past its end. */
+/**
+ * A source date counts as live until one day past its end. Not a no-op next
+ * to ingest's own guard: the council dates are day-granular (00:00, or a
+ * listing's last day), so without the slack an event happening TODAY would be
+ * judged "over" here and dropped before ingest could keep it to end of day.
+ * Gates both the listing-level skip and the detail-level "already over".
+ */
 export const PAST_TOLERANCE_S = 86_400;
 
 export interface MunicipalState {
 	seen: string[];
+	/**
+	 * Failed parses (no title or no date) per detail url. At
+	 * MAX_PARSE_ATTEMPTS the url is given up on and moves into `seen`.
+	 * Optional: state files written before this existed lack it.
+	 */
+	attempts?: ParseAttempts;
 }
 
 export const DEFAULT_STATE: MunicipalState = { seen: [] };
@@ -603,6 +626,8 @@ export async function scrape(
 	const fetched = new Set<string>();
 	/** Fetched and emitted or deliberately skipped: marked seen on commit. */
 	const handled = new Set<string>();
+	/** This run's failed-parse counts, merged into the state on commit. */
+	const pendingAttempts: ParseAttempts = {};
 	const discovered = new Set<string>();
 	const events: RawEvent[] = [];
 	const delay = () => deps.sleep(randomDelay());
@@ -612,7 +637,9 @@ export async function scrape(
 		// skipped, two in a row mean the council's site is down and hammering
 		// the rest of its pages helps nobody.
 		let deadPages = 0;
-		for (let page = 1; page <= site.maxPages; page++) {
+		// Starts at the safety cap; page 1's paginator links narrow it.
+		let lastPage = site.maxPages;
+		for (let page = 1; page <= lastPage; page++) {
 			const url =
 				page === 1 || !site.paginator
 					? site.listing
@@ -642,6 +669,12 @@ export async function scrape(
 				continue;
 			}
 			deadPages = 0;
+			if (page === 1 && site.paginator) {
+				const advertised = lastPageFromHtml(html, `${site.paginator}_page`);
+				if (advertised != null) {
+					lastPage = Math.min(advertised, site.maxPages);
+				}
+			}
 			const items = parseListingItems(html, site);
 			if (page === 1 && items.length === 0) {
 				// A council's first listing page always lists events: zero items
@@ -679,10 +712,23 @@ export async function scrape(
 						}
 					} else if (
 						// Parses fine and is merely over: a deliberate skip too.
-						// No title or no date is a parse failure: retried next run.
 						toRawEvent(site, item.url, detail, Number.NEGATIVE_INFINITY)
 					) {
 						handled.add(item.url);
+					} else {
+						// No title or no date: a parse failure, retried next run
+						// until the attempt cap, then given up on (seen) so the
+						// page stops eating the per-run request cap.
+						const attempt = recordParseFailure(
+							state.attempts,
+							pendingAttempts,
+							item.url,
+						);
+						if (attempt.exhausted) {
+							handled.add(item.url);
+							failures++;
+							firstError ??= giveUpMessage(item.url);
+						}
 					}
 				} catch (err) {
 					failures++;
@@ -701,6 +747,9 @@ export async function scrape(
 		// Deferred (C7): the runner saves only after ingest committed. Only
 		// handled items are marked; a failed fetch or parse is retried.
 		commit: () =>
-			deps.saveState({ seen: [...new Set([...state.seen, ...handled])] }),
+			deps.saveState({
+				seen: [...new Set([...state.seen, ...handled])],
+				attempts: mergeAttempts(state.attempts, pendingAttempts, handled),
+			}),
 	};
 }

@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import { authDb } from "./db.js";
 import { savedEvent } from "./schema.js";
@@ -8,6 +8,24 @@ import { savedEvent } from "./schema.js";
  * list, all on the auth database. The unique (user, slug) index is what makes
  * `saveEvent` a no-op when the row already exists.
  */
+
+/** Most saved events one reader can hold; a bound, not a product feature. */
+export const MAX_SAVED_PER_USER = 500;
+
+/** Upper bound on a slug's length (a long title's slug plus `-fp12`). */
+export const MAX_SLUG_LENGTH = 200;
+
+/**
+ * The shape ingest produces: `slugify(title)-fp12`, i.e. lowercase letters and
+ * numbers (any script, diacritics already stripped) in hyphen-separated runs.
+ * Shape only: the server cannot see the snapshot, so whether the event exists
+ * is the saved page's problem (it renders unresolved slugs as "unavailable").
+ */
+const SLUG_SHAPE = /^[\p{Ll}\p{Lo}\p{N}]+(?:-[\p{Ll}\p{Lo}\p{N}]+)*$/u;
+
+export function isValidSlug(slug: string): boolean {
+	return slug.length <= MAX_SLUG_LENGTH && SLUG_SHAPE.test(slug);
+}
 
 /** Newest first — the saved page reads newest-saved on top. */
 export async function listSavedSlugs(userId: string): Promise<string[]> {
@@ -20,16 +38,31 @@ export async function listSavedSlugs(userId: string): Promise<string[]> {
 	return rows.map((row) => row.eventSlug);
 }
 
-export async function saveEvent(userId: string, slug: string): Promise<void> {
-	await authDb
-		.insert(savedEvent)
-		.values({
-			id: crypto.randomUUID(),
-			userId,
-			eventSlug: slug,
-			createdAt: new Date(),
-		})
-		.onConflictDoNothing();
+/**
+ * Save one slug, unless the reader is already at `MAX_SAVED_PER_USER`.
+ *
+ * The cap is enforced inside the INSERT (a conditional insert-select) rather
+ * than as count-then-insert, so two concurrent requests cannot both squeeze
+ * past it. Re-saving a slug the reader already holds stays a success at the
+ * cap: it is an idempotent no-op, not a new row.
+ */
+export async function saveEvent(
+	userId: string,
+	slug: string,
+): Promise<"saved" | "limit"> {
+	const result = await authDb.run(sql`
+		INSERT INTO saved_event (id, user_id, event_slug, created_at)
+		SELECT ${crypto.randomUUID()}, ${userId}, ${slug}, ${Math.floor(Date.now() / 1000)}
+		WHERE (SELECT count(*) FROM saved_event WHERE user_id = ${userId}) < ${MAX_SAVED_PER_USER}
+		ON CONFLICT DO NOTHING`);
+	if (result.rowsAffected > 0) return "saved";
+
+	const existing = await authDb
+		.select({ id: savedEvent.id })
+		.from(savedEvent)
+		.where(and(eq(savedEvent.userId, userId), eq(savedEvent.eventSlug, slug)))
+		.limit(1);
+	return existing.length > 0 ? "saved" : "limit";
 }
 
 export async function unsaveEvent(userId: string, slug: string): Promise<void> {

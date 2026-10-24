@@ -3,6 +3,48 @@
 
 @source "./**/*.{ts,tsx}";
 
+/* Self-hosted webfonts: latin subset, one variable woff2 per family, served
+   from public/fonts (licence in OFL.txt there). Karla and Schibsted Grotesk
+   are preloaded in index.html; JetBrains Mono (labels) loads on demand. */
+@font-face {
+	font-family: "Schibsted Grotesk";
+	font-style: normal;
+	font-weight: 700 800;
+	font-display: swap;
+	src: url("/fonts/schibsted-grotesk-latin-var.woff2") format("woff2");
+}
+
+@font-face {
+	font-family: "Karla";
+	font-style: normal;
+	font-weight: 400 700;
+	font-display: swap;
+	src: url("/fonts/karla-latin-var.woff2") format("woff2");
+}
+
+@font-face {
+	font-family: "JetBrains Mono";
+	font-style: normal;
+	font-weight: 400 700;
+	font-display: swap;
+	src: url("/fonts/jetbrains-mono-latin-var.woff2") format("woff2");
+}
+
+/* Control borders and decorative affordances. A control's own boundary has to
+   clear 3:1 (WCAG 1.4.11): muted-foreground at 60% does in dark (3.4:1 on the
+   card) but only reaches 2.9:1 in light, so light mixes in more ink. */
+:root {
+	--control: rgb(163 163 163 / 0.6);
+}
+
+.light {
+	--control: rgb(82 82 82 / 0.7);
+}
+
+@theme inline {
+	--color-control: var(--control);
+}
+
 /* Porta443: dark is the DEFAULT canvas; the theme toggle adds `.light`
    (mapped in globals.css). No .dark variant needed. */
 @custom-variant light (&:is(.light *));

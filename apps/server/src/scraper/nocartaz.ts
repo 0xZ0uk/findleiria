@@ -117,7 +117,12 @@ export const hubUrl = (slug: string): string => `${ORIGIN}/distrito/${slug}/`;
 
 /** Safety net on detail fetches per run; unseen ids are retried next run. */
 export const MAX_DETAIL_REQUESTS = 400;
-/** A source date counts as live until one day past its end. */
+/**
+ * A source date counts as live until one day past its end. Gates the "already
+ * over" drop in `toRawEvent`: an open-ended gig (no end) or a date-only card
+ * is still on until the end of its Lisbon day, which ingest honours, so this
+ * gate must not cut it earlier.
+ */
 export const PAST_TOLERANCE_S = 86_400;
 
 /**

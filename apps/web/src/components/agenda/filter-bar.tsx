@@ -35,7 +35,7 @@ const CHEVRON =
  * so the fastest way out of "Hoje" is the same control that got you in.
  */
 const CHIP_OFF =
-	"inline-flex h-9 shrink-0 items-center rounded-[4px] border border-muted-foreground/60 bg-card px-3 text-[14px] font-medium text-foreground focus-ring motion-safe:transition-colors hover:border-primary/60 hover:text-primary";
+	"inline-flex h-9 shrink-0 items-center rounded-[4px] border border-control bg-card px-3 text-[14px] font-medium text-foreground focus-ring motion-safe:transition-colors hover:border-primary/60 hover:text-primary";
 const CHIP_ON =
 	"inline-flex h-9 shrink-0 items-center rounded-[4px] border border-primary bg-primary px-3 text-[14px] font-medium text-primary-foreground focus-ring motion-safe:transition-colors";
 
@@ -212,7 +212,7 @@ function ViewToggle({ agenda }: { agenda: Agenda }) {
 		<div
 			role="group"
 			aria-label="Vista"
-			className="inline-flex h-11 shrink-0 items-center gap-0.5 rounded-[4px] border border-muted-foreground/60 p-0.5 sm:h-10"
+			className="inline-flex h-11 shrink-0 items-center gap-0.5 rounded-[4px] border border-control p-0.5 sm:h-10"
 		>
 			{views.map(({ id, label, Icon }) => {
 				const active = agenda.vista === id;

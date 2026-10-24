@@ -24,7 +24,7 @@ import {
 /**
  * The build-time half of the static snapshot (see `./snapshot-shape.ts`).
  *
- * The same query functions the dev tRPC router wraps, run once against
+ * The query functions in `./queries/events`, run once against
  * Turso (production build) or `local.db` (dev), and written out as JSON.
  * Node-only: the web bundle never imports this file, only the shape module.
  */

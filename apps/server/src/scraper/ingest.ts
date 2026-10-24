@@ -1,7 +1,11 @@
 import { db, schema } from "@events-tracker/db";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
-import { canonicalizeCategories } from "./categories";
+import {
+	canonicalizeCategories,
+	sameCategories,
+	sortCategories,
+} from "./categories";
 import type { Conn } from "./conn";
 import { errorMessage } from "./errors";
 import { deleteEvents } from "./event-delete";
@@ -554,7 +558,7 @@ async function upsertEvent(
 		// converge instead of flip-flopping between sources' fields. The best
 		// source itself refreshes its own occurrence (C5, planRefresh).
 		const existingCats = (existing.categories ?? []) as string[];
-		const mergedCats = [...new Set([...existingCats, ...categories])].sort();
+		const mergedCats = sortCategories([...existingCats, ...categories]);
 		const mergedUrl = existing.url ?? raw.url;
 		let mergedEnd = existing.end_at ?? (raw.startAt != null ? raw.endAt : null);
 		let refresh: Refresh | null = null;
@@ -577,7 +581,9 @@ async function upsertEvent(
 			if (refresh) mergedEnd = refresh.end_at;
 		}
 		const changed =
-			JSON.stringify(existingCats) !== JSON.stringify(mergedCats) ||
+			// Set comparison: rows stored in an older (alphabetical) order are not
+			// rewritten just to reorder them.
+			!sameCategories(existingCats, mergedCats) ||
 			existing.end_at !== mergedEnd ||
 			existing.url !== mergedUrl ||
 			(refresh != null &&

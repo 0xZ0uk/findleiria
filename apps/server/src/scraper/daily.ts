@@ -22,7 +22,7 @@
 import { join } from "node:path";
 
 import { sources } from "./index";
-import { type BatchReport, runBatch } from "./runner";
+import { type BatchReport, parseConcurrency, runBatch } from "./runner";
 
 export interface PublishDecision {
 	publish: boolean;
@@ -105,7 +105,9 @@ async function publish(): Promise<boolean> {
 }
 
 if (import.meta.main) {
-	const report = await runBatch(Object.entries(sources));
+	const report = await runBatch(Object.entries(sources), {
+		concurrency: parseConcurrency(process.env.SCRAPE_CONCURRENCY),
+	});
 	const decision = publishDecision(report);
 	const published = decision.publish ? await publish() : null;
 	console.log(formatSummary(report, decision, published));

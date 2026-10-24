@@ -1,7 +1,7 @@
 import { RefreshCw, SearchX } from "lucide-react";
 import type { Agenda } from "@/hooks/use-agenda";
 import { plural } from "@/utils/format";
-import { BUTTON, MICRO } from "./layout";
+import { BUTTON } from "./layout";
 
 /** Loading: a few plausible rows, so the page keeps its shape. */
 export function AgendaSkeleton() {
@@ -32,20 +32,23 @@ export function AgendaSkeleton() {
 	);
 }
 
+/** `what` completes "Não foi possível carregar …", so each page names its own. */
 export function AgendaError({
+	what,
 	message,
 	onRetry,
 }: {
+	what: string;
 	message: string;
 	onRetry: () => void;
 }) {
 	return (
 		<div role="alert" className="mt-4 max-w-[46ch]">
-			<p className="p443-card-title">Não foi possível carregar a agenda.</p>
+			<p className="p443-card-title">Não foi possível carregar {what}.</p>
 			<p className="mt-2 text-[15px] text-muted-foreground leading-relaxed">
 				A leitura dos dados falhou. Tenta de novo.
 			</p>
-			<p className="mt-3 line-clamp-3 break-words font-mono text-[12px] text-muted-foreground/70">
+			<p className="mt-3 line-clamp-3 break-words font-mono text-[12px] text-muted-foreground/85">
 				{message}
 			</p>
 			<button type="button" onClick={onRetry} className={`${BUTTON} mt-5`}>

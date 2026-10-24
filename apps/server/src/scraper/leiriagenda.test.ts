@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-
+import { must } from "../test-helpers";
 import { fingerprint, lisbonDay } from "./fingerprint";
 import {
 	LISTING_URL,
@@ -53,18 +53,18 @@ describe("parseDetail (offline fixture)", () => {
 
 	test("parses .hora into the correct epoch (2026-09-04 14:00 Lisbon)", () => {
 		expect(detail.startAt).toBe(1788526800);
-		expect(lisbonDay(detail.startAt!)).toBe("2026-09-04");
+		expect(lisbonDay(must(detail.startAt))).toBe("2026-09-04");
 	});
 
 	test("parses end date 2026-09-06", () => {
 		expect(detail.endAt).not.toBeNull();
-		expect(lisbonDay(detail.endAt!)).toBe("2026-09-06");
+		expect(lisbonDay(must(detail.endAt))).toBe("2026-09-06");
 	});
 
 	test("merged card+detail carries title, venue and categories", () => {
-		const card = parseListing(listingHtml).find(
-			(c) => c.slug === "tattoo-artes",
-		)!;
+		const card = must(
+			parseListing(listingHtml).find((c) => c.slug === "tattoo-artes"),
+		);
 		const merged = mergeCardWithDetail(card, detail);
 		expect(merged.title).toBe("Tattoo Artes");
 		expect(merged.venueName).toBe("Centro Cultural Mercado de Sant'Ana");
@@ -76,12 +76,12 @@ describe("parseDetail (offline fixture)", () => {
 		const a = fingerprint(
 			"Tattoo Artes",
 			"Centro Cultural Mercado de Sant'Ana",
-			detail.startAt!,
+			must(detail.startAt),
 		);
 		const b = fingerprint(
 			"Tattoo Artes",
 			"mercado-de-santana",
-			detail.startAt!,
+			must(detail.startAt),
 		);
 		expect(a).toBe(b);
 	});

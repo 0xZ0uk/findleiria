@@ -320,13 +320,14 @@ has committed, and exits non-zero if the hook fails.
 
 pnpm + Bun monorepo · React SPA with pathname routing, no router library (web,
 :3300) · better-auth (Google + email/password) on a separate libSQL database ·
-Drizzle + libSQL (`local.db` in dev, remote Turso in production) · Hono + tRPC
-survive as a **local-dev only** surface · Turborepo + Biome.
+Drizzle + libSQL (`local.db` in dev, remote Turso in production) · Hono
+survives as a **local-dev only** surface (auth, saved events, digest) ·
+Turborepo + Biome.
 
 ```
 apps/server/     scraper (src/scraper/) + digest CLI; Hono API for dev only
 apps/web/        static SPA: / (agenda + map), /evento/<slug>, /guardados, /entrar
-packages/api/    query functions (src/queries/), snapshot builder, tRPC routers wrapping them
+packages/api/    query functions (src/queries/), snapshot builder
 packages/auth/   better-auth config, auth DB schema + migrations, Hono routes
 packages/db/     Drizzle schema, migrations, seeds (src/client.ts = env-free read client)
 packages/ui/     shared tokens (styles/globals.css) and primitives; see DESIGN.md
@@ -366,9 +367,8 @@ eventbrite, viralagenda, ticketline, ...).
    gains a date.
 4. **Serve** — the SPA reads no database: it fetches the static JSON snapshot
    (`/data/agenda.json`, `/data/events/<slug>.json`) that the build writes from
-   Turso (see Deploy). The dev-only Hono server exposes the query functions
-   (`events.list`, `byDay`, `undated`, `venues`, `stats`) over tRPC plus
-   `/digest` (JSON).
+   Turso (see Deploy). The dev-only Hono server mounts the auth routes,
+   `/api/saved` and `/digest` (JSON); there is no query API.
 5. **Cron (Hermes)** — `daily` at 07:00 (all sources, cleanup passes once,
    publish; an empty listing prints an `ALERT` line), daily Discord digest 09:00 (`DIGEST_KEYWORDS`
    watchlist → ⭐ lines, rest compressed).

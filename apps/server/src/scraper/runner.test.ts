@@ -7,6 +7,8 @@ import type { IngestResult, PostPassOutcome, ScrapeMeta } from "./ingest";
 import {
 	alertFor,
 	type BatchReport,
+	DEFAULT_SCRAPE_CONCURRENCY,
+	parseConcurrency,
 	runBatch,
 	runSource,
 	type ScrapeOutcome,
@@ -436,6 +438,157 @@ describe("runBatch — the global passes run once per batch (C8)", () => {
 		expect(report.failedSources).toEqual(["municipal"]);
 		expect(report.ok).toBe(false);
 		expect(lines.some((l) => l.startsWith("FAILED municipal"))).toBe(true);
+	});
+});
+
+describe("S12 — scrape phases overlap, ingest stays serial and ordered", () => {
+	const passes: PostPassOutcome = {
+		purged: 0,
+		venuesMerged: 0,
+		groupsReconciled: 0,
+		errors: [],
+		timingsMs: { purge: 0, venueMerge: 0, reconcile: 0 },
+	};
+	const ids = ["s0", "s1", "s2", "s3", "s4"];
+
+	/** Fake sources + an ingest that records overlap; `barrier` holds the first scrapes. */
+	function harness(opts: { barrier?: number } = {}) {
+		let activeScrapes = 0;
+		let maxActiveScrapes = 0;
+		let activeIngests = 0;
+		let maxActiveIngests = 0;
+		const ingestOrder: string[] = [];
+		const scrapeStarts: string[] = [];
+		const ingestStartedWhileScraping: boolean[] = [];
+		let release: () => void = () => {};
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		let started = 0;
+
+		const sources = ids.map(
+			(id, i) =>
+				[
+					id,
+					async (): Promise<ScrapeOutcome> => {
+						activeScrapes++;
+						maxActiveScrapes = Math.max(maxActiveScrapes, activeScrapes);
+						scrapeStarts.push(id);
+						started++;
+						if (opts.barrier != null && started === opts.barrier) release();
+						// The first `barrier` scrapes cannot finish until all of them are
+						// running at once: this only completes if they truly overlap.
+						if (opts.barrier != null && i < opts.barrier) await gate;
+						// Later sources finish sooner, so completion order is NOT
+						// registry order.
+						await new Promise((r) => setTimeout(r, (ids.length - i) * 3));
+						activeScrapes--;
+						return { events: [rawEvent(id)], failures: 0, firstError: null };
+					},
+				] as const,
+		);
+
+		const ingestFn = async (
+			events: RawEvent[],
+			source: string,
+			meta: ScrapeMeta,
+		): Promise<IngestResult> => {
+			activeIngests++;
+			maxActiveIngests = Math.max(maxActiveIngests, activeIngests);
+			ingestOrder.push(source);
+			ingestStartedWhileScraping.push(activeScrapes > 0);
+			await new Promise((r) => setTimeout(r, 2));
+			activeIngests--;
+			return stubIngest([])(events, source, meta);
+		};
+
+		const run = (concurrency?: number) =>
+			runBatch(sources, {
+				ingestFn,
+				concurrency,
+				postPasses: async () => passes,
+				recordPostPasses: async () => {},
+				log: () => {},
+			});
+		return {
+			run,
+			stats: () => ({
+				maxActiveScrapes,
+				maxActiveIngests,
+				ingestOrder,
+				scrapeStarts,
+				ingestStartedWhileScraping,
+			}),
+		};
+	}
+
+	test("with concurrency 3 the scrapes overlap but ingest is serial, in registry order", async () => {
+		const h = harness({ barrier: 3 });
+		const report = await h.run(3);
+		const s = h.stats();
+		expect(s.maxActiveScrapes).toBe(3);
+		expect(s.maxActiveIngests).toBe(1);
+		expect(s.ingestOrder).toEqual(ids);
+		// Scrapes start in registry order too.
+		expect(s.scrapeStarts).toEqual(ids);
+		// Ingest of an early source ran while later sources were still scraping.
+		expect(s.ingestStartedWhileScraping.some(Boolean)).toBe(true);
+		expect(report.runs.map((r) => r.source)).toEqual(ids);
+		expect(report.ok).toBe(true);
+	});
+
+	test("concurrency 1 is the old strictly sequential behaviour", async () => {
+		const h = harness();
+		await h.run(1);
+		const s = h.stats();
+		expect(s.maxActiveScrapes).toBe(1);
+		expect(s.maxActiveIngests).toBe(1);
+		expect(s.ingestOrder).toEqual(ids);
+	});
+
+	test("the default is bounded at 3", async () => {
+		expect(DEFAULT_SCRAPE_CONCURRENCY).toBe(3);
+		const h = harness();
+		await h.run();
+		expect(h.stats().maxActiveScrapes).toBeLessThanOrEqual(3);
+		expect(h.stats().maxActiveScrapes).toBeGreaterThan(1);
+	});
+
+	test("a scrape that throws is a failed source in its registry slot; the rest run", async () => {
+		const order: string[] = [];
+		const report = await runBatch(
+			[
+				["a", async () => ({ events: [], failures: 0, firstError: null })],
+				[
+					"b",
+					async () => {
+						throw new Error("boom");
+					},
+				],
+				["c", async () => ({ events: [], failures: 0, firstError: null })],
+			],
+			{
+				concurrency: 3,
+				ingestFn: async (events, source, meta) => {
+					order.push(source);
+					return stubIngest([])(events, source, meta);
+				},
+				postPasses: async () => passes,
+				recordPostPasses: async () => {},
+				log: () => {},
+			},
+		);
+		expect(order).toEqual(["a", "b", "c"]);
+		expect(report.failedSources).toEqual(["b"]);
+	});
+
+	test("parseConcurrency: unset gives the default, junk is loud", () => {
+		expect(parseConcurrency(undefined)).toBe(3);
+		expect(parseConcurrency("")).toBe(3);
+		expect(parseConcurrency("5")).toBe(5);
+		expect(() => parseConcurrency("0")).toThrow("SCRAPE_CONCURRENCY");
+		expect(() => parseConcurrency("two")).toThrow("SCRAPE_CONCURRENCY");
+		expect(() => parseConcurrency("1.5")).toThrow("SCRAPE_CONCURRENCY");
 	});
 });
 

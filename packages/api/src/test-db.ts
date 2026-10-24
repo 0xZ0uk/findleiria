@@ -7,7 +7,7 @@ import { migrate } from "drizzle-orm/libsql/migrator";
 
 /**
  * Test-only: a throwaway libSQL file with the committed migrations applied, so
- * query tests run the real SQL instead of a stand-in. Not a `_test` file, so
+ * query tests run the real SQL instead of a stand-in. Not a `.test` file, so
  * `bun test` does not pick it up as a suite.
  */
 

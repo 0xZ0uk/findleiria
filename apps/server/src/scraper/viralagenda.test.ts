@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-
+import { must } from "../test-helpers";
 import { lisbonDay } from "./fingerprint";
 import {
 	cityUrl,
@@ -29,7 +29,7 @@ const venueHtml = read("va-venue.html"); // a venue page: NOT a card listing
 const cardById = (cards: ListingCard[], id: string) => {
 	const card = cards.find((c) => c.id === id);
 	expect(card).toBeDefined();
-	return card!;
+	return must(card);
 };
 
 describe("parseListing (offline fixtures)", () => {
@@ -171,36 +171,33 @@ describe("a venue page served instead of a listing", () => {
 describe("toRawEvent (Leiria city scope)", () => {
 	test("Leiria card + Leiria detail -> dated event with detail fields", () => {
 		const card = cardById(parseListing(concertsHtml), "1732846");
-		const detail = parseDetail(detail3Html)!;
-		const raw = toRawEvent(card, detail);
-		expect(raw).not.toBeNull();
+		const detail = must(parseDetail(detail3Html));
+		const raw = must(toRawEvent(card, detail));
 		// Detail is authoritative for title/venue/description…
-		expect(raw!.title).toBe("#3 Fuckup Nights Leiria");
-		expect(raw!.venueName).toBe("Mercado Municipal de Leiria");
+		expect(raw.title).toBe("#3 Fuckup Nights Leiria");
+		expect(raw.venueName).toBe("Mercado Municipal de Leiria");
 		// …while the slug uses the CARD id (va-<id>).
-		expect(raw!.slug).toBe("va-1732846");
-		expect(raw!.city).toBe("Leiria");
+		expect(raw.slug).toBe("va-1732846");
+		expect(raw.city).toBe("Leiria");
 		// startDate 2026-09-03T17:00+01:00 = 2026-09-03 17:00 Lisbon.
-		expect(raw!.startAt).toBe(1788451200);
-		expect(lisbonDay(raw!.startAt!)).toBe("2026-09-03");
+		expect(raw.startAt).toBe(1788451200);
+		expect(lisbonDay(must(raw.startAt))).toBe("2026-09-03");
 	});
 
 	test("00:59 placeholder card with no detail pins to the date at 00:00", () => {
 		const card = cardById(parseListing(concertsHtml), "1732846");
-		const raw = toRawEvent(card, null);
-		expect(raw).not.toBeNull();
-		expect(raw!.startAt).toBe(1788649200); // 2026-09-06 00:00 Lisbon
-		expect(lisbonDay(raw!.startAt!)).toBe("2026-09-06");
+		const raw = must(toRawEvent(card, null));
+		expect(raw.startAt).toBe(1788649200); // 2026-09-06 00:00 Lisbon
+		expect(lisbonDay(must(raw.startAt))).toBe("2026-09-06");
 	});
 
 	test("district-scope card (Pombal) is now IN scope", () => {
-		const pombal = parseListing(districtHtml).find(
-			(c) => c.cities[0] === "Pombal",
-		)!;
+		const pombal = must(
+			parseListing(districtHtml).find((c) => c.cities[0] === "Pombal"),
+		);
 		// SLICE_6 scope correction: Pombal is a district municipality, so its
 		// events are kept (city passes through to the venue row).
-		const raw = toRawEvent(pombal, null);
-		expect(raw).not.toBeNull();
+		const raw = must(toRawEvent(pombal, null));
 		expect(raw?.city?.toLowerCase()).toContain("pombal");
 	});
 });

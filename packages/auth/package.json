@@ -13,6 +13,13 @@
 			"default": "./dist/*.js"
 		}
 	},
+	"imports": {
+		"#libsql-client": {
+			"types": "./src/libsql-client.web.ts",
+			"bun": "./src/libsql-client.node.ts",
+			"default": "./dist/libsql-client.web.js"
+		}
+	},
 	"scripts": {
 		"build": "tsc -p tsconfig.build.json",
 		"env:check:production": "NODE_ENV=production varlock load",
@@ -34,7 +41,6 @@
 		"better-auth": "1.7.4",
 		"drizzle-orm": "^0.45.2",
 		"hono": "catalog:",
-		"libsql": "catalog:",
 		"nodemailer": "^10.2.1"
 	},
 	"devDependencies": {

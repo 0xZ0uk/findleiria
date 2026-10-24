@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-
+import { must } from "../test-helpers";
 import {
 	DESCRIPTION_LIMIT,
 	extractDate,
@@ -31,32 +31,33 @@ describe("parseFeed (offline fixture)", () => {
 	});
 
 	test("Colóquio date-from-text: 1 fevereiro => day 1, month 2, non-null epoch", () => {
-		const ev = parseFeed(fixture).find(
-			(e) => e.slug === "coloquio-prevencao-de-quedas",
+		const ev = must(
+			parseFeed(fixture).find((e) => e.slug === "coloquio-prevencao-de-quedas"),
 		);
-		expect(ev).toBeDefined();
-		expect(ev!.startAt).not.toBeNull();
-		const day = lisbonDay(ev!.startAt!);
+		expect(ev.startAt).not.toBeNull();
+		const day = lisbonDay(must(ev.startAt));
 		// month+day always 02-01 regardless of the current/next year rule.
 		expect(day.slice(5)).toBe("02-01");
-		const parsed = extractDate(
-			"A atividade física na redução do risco de quedas. 1 fevereiro às 14h30",
+		const parsed = must(
+			extractDate(
+				"A atividade física na redução do risco de quedas. 1 fevereiro às 14h30",
+			),
 		);
-		expect(parsed).not.toBeNull();
-		expect(parsed!.day).toBe(1);
-		expect(parsed!.month).toBe(2);
-		expect(parsed!.hour).toBe(14);
-		expect(parsed!.minute).toBe(30);
+		expect(parsed.day).toBe(1);
+		expect(parsed.month).toBe(2);
+		expect(parsed.hour).toBe(14);
+		expect(parsed.minute).toBe(30);
 	});
 
 	test("undated item keeps startAt null and dateText non-null (still ingested)", () => {
-		const ev = parseFeed(fixture).find(
-			(e) => e.slug === "dialogo-aberto-envelhecimento-ativo",
+		const ev = must(
+			parseFeed(fixture).find(
+				(e) => e.slug === "dialogo-aberto-envelhecimento-ativo",
+			),
 		);
-		expect(ev).toBeDefined();
-		expect(ev!.startAt).toBeNull();
-		expect(ev!.dateText).not.toBeNull();
-		expect(ev!.dateText!.toLowerCase()).toContain("janeiro");
+		expect(ev.startAt).toBeNull();
+		expect(ev.dateText).not.toBeNull();
+		expect(must(ev.dateText).toLowerCase()).toContain("janeiro");
 	});
 
 	test("pseudo-categories are excluded, real categories survive", () => {
@@ -73,21 +74,25 @@ describe("parseFeed (offline fixture)", () => {
 
 	test("venue extracted from the 📌/📍 line", () => {
 		const events = parseFeed(fixture);
-		const coll = events.find((e) => e.slug === "coloquio-prevencao-de-quedas")!;
+		const coll = must(
+			events.find((e) => e.slug === "coloquio-prevencao-de-quedas"),
+		);
 		expect(coll.venueName.toLowerCase()).toContain(
 			"auditório do estádio dr. magalhães pessoa",
 		);
-		const quinta = events.find(
-			(e) => e.slug === "visita-a-vinha-biologica-prova-de-vinhos",
-		)!;
+		const quinta = must(
+			events.find((e) => e.slug === "visita-a-vinha-biologica-prova-de-vinhos"),
+		);
 		expect(quinta.venueName.toLowerCase()).toContain("quinta da serradinha");
 	});
 
 	test("default venue for an item without a venue hint", () => {
-		const ev = parseFeed(fixture).find(
-			(e) => e.slug === "dialogo-aberto-envelhecimento-ativo",
+		const ev = must(
+			parseFeed(fixture).find(
+				(e) => e.slug === "dialogo-aberto-envelhecimento-ativo",
+			),
 		);
-		expect(ev!.venueName).toBe("CM Leiria");
+		expect(ev.venueName).toBe("CM Leiria");
 	});
 
 	test("description is stripped text and bounded to DESCRIPTION_LIMIT", () => {
@@ -99,9 +104,9 @@ describe("parseFeed (offline fixture)", () => {
 	});
 
 	test("imageUrl extracted from the trailing <img>", () => {
-		const ev = parseFeed(fixture).find(
-			(e) => e.slug === "coloquio-prevencao-de-quedas",
-		)!;
+		const ev = must(
+			parseFeed(fixture).find((e) => e.slug === "coloquio-prevencao-de-quedas"),
+		);
 		expect(ev.imageUrl).toBe(
 			"https://www.cm-leiria.pt/cmleiria/uploads/event/image/6379/coloquio_prevencao_de_quedas.jpg",
 		);

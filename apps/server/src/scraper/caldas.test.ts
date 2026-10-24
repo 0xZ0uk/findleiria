@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-
+import { must } from "../test-helpers";
 import {
 	DEFAULT_VENUE,
 	decodeEntities,
 	MAX_LISTING_PAGES,
 	parseCardDate,
 	parseListingCards,
-	RETRO_TOLERANCE_S,
 	scrape,
 	slugFor,
 	toRawEvent,
@@ -31,7 +30,7 @@ describe("parseListingCards (real page fixtures)", () => {
 	});
 
 	test("first card extracts slug/title/category/local start & end", () => {
-		const first = parseListingCards(page1)[0]!;
+		const first = must(parseListingCards(page1)[0]);
 		expect(first.slug).toBe("em-caldas-o-que");
 		expect(first.title).toBe("Em Caldas, o quê? setembro 2026");
 		expect(first.category).toBe("Agenda mensal");
@@ -228,9 +227,6 @@ describe("scrape (injected fetchText over the real fixtures)", () => {
 });
 
 describe("tolerances / constants", () => {
-	test("RETRO_TOLERANCE_S is one day", () => {
-		expect(RETRO_TOLERANCE_S).toBe(86_400);
-	});
 	test("MAX_LISTING_PAGES caps the walk", () => {
 		expect(MAX_LISTING_PAGES).toBe(5);
 	});

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-
+import { must } from "../test-helpers";
 import { toEpochInLisbon } from "./fingerprint";
 import {
 	cardVenueEvidence,
@@ -52,7 +52,7 @@ describe("parseCards (real hub fixture)", () => {
 	});
 
 	test("first card: attributes + markup agree, concelho chip is stripped", () => {
-		const first = cards[0]!;
+		const first = must(cards[0]);
 		expect(first.id).toBe("06009145e171bc07");
 		expect(first.title).toBe("Carolina de Deus @ Teatro José Lúcio da Silva");
 		expect(first.venue).toBe("Teatro José Lúcio da Silva (TJLS)");
@@ -73,7 +73,7 @@ describe("parseCards (real hub fixture)", () => {
 	});
 
 	test("aggregator rows the hub could not file keep an empty concelho", () => {
-		const santarem = cards.find((c) => c.id === "b5d9211358b0bd95")!;
+		const santarem = must(cards.find((c) => c.id === "b5d9211358b0bd95"));
 		expect(santarem.city).toBe("");
 		expect(santarem.venue).toBe("");
 		expect(santarem.title).toContain(
@@ -173,11 +173,13 @@ describe("parseDetail (real detail fixtures)", () => {
 
 describe("toRawEvent", () => {
 	const cards = parseCards(listing);
-	const first = cards[0]!;
-	const santarem = cards.find((c) => c.id === "b5d9211358b0bd95")!;
+	const first = must(cards[0]);
+	const santarem = must(cards.find((c) => c.id === "b5d9211358b0bd95"));
 
 	test("an in-district card becomes a RawEvent keyed on the hub's own id", () => {
-		const raw = toRawEvent(first, parseDetail(detailEvent), NOW, inDistrict)!;
+		const raw = must(
+			toRawEvent(first, parseDetail(detailEvent), NOW, inDistrict),
+		);
 		expect(raw.slug).toBe("nocartaz-06009145e171bc07");
 		expect(raw.city).toBe("Leiria");
 		expect(raw.venueName).toBe("Teatro José Lúcio da Silva (TJLS)");
@@ -199,29 +201,33 @@ describe("toRawEvent", () => {
 
 	test("the detail's locality rescues a row the hub left unfiled", () => {
 		const unfiled = { ...santarem, city: "" };
-		const raw = toRawEvent(
-			unfiled,
-			{ ...parseDetail(detailFestival), city: "Nazaré" },
-			NOW,
-			inDistrict,
-		)!;
+		const raw = must(
+			toRawEvent(
+				unfiled,
+				{ ...parseDetail(detailFestival), city: "Nazaré" },
+				NOW,
+				inDistrict,
+			),
+		);
 		expect(raw.city).toBe("Nazaré");
 	});
 
 	test("card-only data is enough when the detail fetch failed", () => {
-		const raw = toRawEvent(first, null, NOW, inDistrict)!;
+		const raw = must(toRawEvent(first, null, NOW, inDistrict));
 		expect(raw.city).toBe("Leiria");
 		expect(raw.venueName).toBe("Teatro José Lúcio da Silva (TJLS)");
 		expect(raw.description).toContain("A voz doce");
 	});
 
 	test("card starts-at is the fallback when the detail has no date", () => {
-		const raw = toRawEvent(
-			first,
-			{ ...parseDetail(detailEvent), startAt: null },
-			NOW,
-			inDistrict,
-		)!;
+		const raw = must(
+			toRawEvent(
+				first,
+				{ ...parseDetail(detailEvent), startAt: null },
+				NOW,
+				inDistrict,
+			),
+		);
 		expect(raw.startAt).toBe(toEpochInLisbon(2026, 9, 11, 21, 30));
 	});
 
@@ -256,7 +262,7 @@ describe("toRawEvent", () => {
 });
 
 describe("isFeedVenue", () => {
-	const first = parseCards(listing)[0]!;
+	const first = must(parseCards(listing)[0]);
 	const card = (over: Partial<NocartazCard>): NocartazCard => ({
 		...first,
 		...over,
@@ -374,7 +380,7 @@ describe("scrape", () => {
 			"https://www.nocartaz.pt/eventos/aaaaaaaaaaaaaaaa/",
 			"https://www.nocartaz.pt/eventos/bbbbbbbbbbbbbbbb/",
 		]);
-		expect(Object.keys(saved[0]!.details).sort()).toEqual([
+		expect(Object.keys(must(saved[0]).details).sort()).toEqual([
 			"aaaaaaaaaaaaaaaa",
 			"bbbbbbbbbbbbbbbb",
 		]);
@@ -401,9 +407,9 @@ describe("scrape", () => {
 			LISTING,
 			"https://www.nocartaz.pt/eventos/bbbbbbbbbbbbbbbb/",
 		]);
-		const cached = result.events.find(
-			(e) => e.slug === "nocartaz-aaaaaaaaaaaaaaaa",
-		)!;
+		const cached = must(
+			result.events.find((e) => e.slug === "nocartaz-aaaaaaaaaaaaaaaa"),
+		);
 		expect(cached.title).toBe("Detalhe cached");
 		expect(cached.description).toBe("descrição completa");
 		expect(cached.imageUrl).toBe(
@@ -432,11 +438,11 @@ describe("scrape", () => {
 			const { deps: d, fetched, saved } = deps({ loadState: () => cache });
 			const result = await scrapeCommitted(d, inDistrict);
 			expect(fetched).toContain(aUrl);
-			const ev = result.events.find(
-				(e) => e.slug === "nocartaz-aaaaaaaaaaaaaaaa",
-			)!;
+			const ev = must(
+				result.events.find((e) => e.slug === "nocartaz-aaaaaaaaaaaaaaaa"),
+			);
 			expect(ev.startAt).toBe(toEpochInLisbon(2026, 10, 1, 21, 0));
-			expect(saved[0]!.details.aaaaaaaaaaaaaaaa?.cardWhen).toBe(
+			expect(must(saved[0]).details.aaaaaaaaaaaaaaaa?.cardWhen).toBe(
 				"2026-10-01 21:00",
 			);
 		});
@@ -459,11 +465,11 @@ describe("scrape", () => {
 				responses: { [aUrl]: "ERR: 500 boom" },
 			});
 			const result = await scrapeCommitted(d, inDistrict);
-			const ev = result.events.find(
-				(e) => e.slug === "nocartaz-aaaaaaaaaaaaaaaa",
-			)!;
+			const ev = must(
+				result.events.find((e) => e.slug === "nocartaz-aaaaaaaaaaaaaaaa"),
+			);
 			expect(ev.startAt).toBe(toEpochInLisbon(2026, 10, 1, 21, 0));
-			expect(saved[0]!.details).not.toHaveProperty("aaaaaaaaaaaaaaaa");
+			expect(must(saved[0]).details).not.toHaveProperty("aaaaaaaaaaaaaaaa");
 		});
 
 		test("an ItemList-only card (no date) keeps its cached detail and cardWhen", async () => {
@@ -481,7 +487,7 @@ describe("scrape", () => {
 			});
 			await scrapeCommitted(d, inDistrict);
 			expect(fetched).toEqual([LISTING]);
-			expect(saved[0]!.details.aaaaaaaaaaaaaaaa?.cardWhen).toBe(
+			expect(must(saved[0]).details.aaaaaaaaaaaaaaaa?.cardWhen).toBe(
 				"2026-09-20 21:00",
 			);
 		});
@@ -512,7 +518,7 @@ describe("scrape", () => {
 		};
 		const { deps: d, saved } = deps({ loadState: () => cache });
 		await scrapeCommitted(d, inDistrict);
-		expect(Object.keys(saved[0]!.details).sort()).toEqual([
+		expect(Object.keys(must(saved[0]).details).sort()).toEqual([
 			"aaaaaaaaaaaaaaaa",
 			"bbbbbbbbbbbbbbbb",
 		]);
@@ -531,8 +537,8 @@ describe("scrape", () => {
 			"nocartaz-aaaaaaaaaaaaaaaa",
 			"nocartaz-bbbbbbbbbbbbbbbb",
 		]);
-		expect(saved[0]!.details).toHaveProperty("bbbbbbbbbbbbbbbb");
-		expect(saved[0]!.details).not.toHaveProperty("aaaaaaaaaaaaaaaa");
+		expect(must(saved[0]).details).toHaveProperty("bbbbbbbbbbbbbbbb");
+		expect(must(saved[0]).details).not.toHaveProperty("aaaaaaaaaaaaaaaa");
 	});
 
 	test("an out-of-district card is not emitted even though its detail fetched", async () => {
@@ -683,8 +689,10 @@ describe("SLICE_17 — untagged rows, known venues", () => {
 			untagged("aaaaaaaaaaaaaaaa", "Banda @ O Pica Miolos") +
 				titledCard("bbbbbbbbbbbbbbbb", "Outro"),
 		);
-		expect(cardVenueEvidence(cards[0]!)).toBe("O Pica Miolos");
-		expect(cardVenueEvidence(cards[1]!)).toBe("Teatro José Lúcio da Silva");
+		expect(cardVenueEvidence(must(cards[0]))).toBe("O Pica Miolos");
+		expect(cardVenueEvidence(must(cards[1]))).toBe(
+			"Teatro José Lúcio da Silva",
+		);
 	});
 
 	test("parseItemList reads event ids and names; dedupes; ignores sala links", () => {
@@ -707,7 +715,7 @@ describe("SLICE_17 — untagged rows, known venues", () => {
 		expect(result.events.map((e) => e.slug)).toEqual([
 			"nocartaz-cccccccccccccccc",
 		]);
-		const event = result.events[0]!;
+		const event = must(result.events[0]);
 		expect(event.city).toBe("Leiria"); // never the aggregator's Coimbra
 		expect(event.venueName).toBe("O Pica Miolos"); // never "Portugal"
 	});
@@ -738,7 +746,7 @@ describe("SLICE_17 — untagged rows, known venues", () => {
 		expect(result.events.map((e) => e.slug)).toEqual([
 			"nocartaz-eeeeeeeeeeeeeeee",
 		]);
-		expect(result.events[0]!.city).toBe("Leiria");
+		expect(must(result.events[0]).city).toBe("Leiria");
 		// the other district's own event on that page is not even detail-fetched
 		expect(fetched).not.toContain(
 			"https://www.nocartaz.pt/eventos/ffffffffffffffff/",
@@ -759,8 +767,8 @@ describe("SLICE_17 — untagged rows, known venues", () => {
 		expect(result.events.map((e) => e.slug)).toEqual([
 			"nocartaz-28592c47db0ef640",
 		]);
-		expect(result.events[0]!.city).toBe("Leiria");
-		expect(result.events[0]!.venueName).toBe("O Pica Miolos");
+		expect(must(result.events[0]).city).toBe("Leiria");
+		expect(must(result.events[0]).venueName).toBe("O Pica Miolos");
 	});
 
 	test("a row that names no venue at all is placed by the municipality in its title", async () => {
@@ -781,7 +789,7 @@ describe("SLICE_17 — untagged rows, known venues", () => {
 		expect(result.events.map((e) => e.slug)).toEqual([
 			"nocartaz-1111111111111111",
 		]);
-		expect(result.events[0]!.city).toBe("Óbidos");
+		expect(must(result.events[0]).city).toBe("Óbidos");
 	});
 
 	test("a real out-of-district locality still wins over the title", async () => {

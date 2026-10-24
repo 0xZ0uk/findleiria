@@ -1,12 +1,15 @@
 import type { SourceId } from "./index";
 import { sources } from "./index";
-import { runBatch } from "./runner";
+import { parseConcurrency, runBatch } from "./runner";
 
 /**
  * Scraper runner.
  *
- *   bun run src/scraper/run.ts            → run EVERY source sequentially
+ *   bun run src/scraper/run.ts            → run EVERY source (scrapes overlap, ingest is serial)
  *   bun run src/scraper/run.ts leiriagenda → run one source
+ *
+ * SCRAPE_CONCURRENCY (default 3) caps how many sources scrape at once; ingest
+ * stays serial, in registry order.
  *
  * Per-source failures never stop the batch — one dead source doesn't stop
  * the rest. That includes a source that *throws*: `runSource` records it as
@@ -33,5 +36,8 @@ if (toRun.length === 0 || toRun.some((id) => !(id in sources))) {
 	process.exit(2);
 }
 
-const report = await runBatch(toRun.map((id) => [id, sources[id]] as const));
+const report = await runBatch(
+	toRun.map((id) => [id, sources[id]] as const),
+	{ concurrency: parseConcurrency(process.env.SCRAPE_CONCURRENCY) },
+);
 process.exit(report.ok ? 0 : 1);
