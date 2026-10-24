@@ -75,11 +75,39 @@ export type IngestFn = (
 	meta: ScrapeMeta,
 ) => Promise<IngestResult>;
 
+/** The network half of a source's run: what `scrape()` gave, or how it threw. */
+export interface ScrapePhase {
+	id: string;
+	outcome: ScrapeOutcome;
+	/** The thrown scrape's message; null when it returned. */
+	thrown: string | null;
+	scrapeMs: number;
+}
+
+/**
+ * Phase 1 of a source's run: the scrape. Network and state-file reads only,
+ * no database access, so several sources can be in this phase at once (they
+ * hit different hosts; each keeps its own politeness delay). Never rejects.
+ */
+export async function scrapeSource(
+	id: string,
+	scrape: () => Promise<ScrapeOutcome>,
+): Promise<ScrapePhase> {
+	const startedAt = Date.now();
+	let outcome: ScrapeOutcome = { events: [], failures: 0, firstError: null };
+	let thrown: string | null = null;
+	try {
+		outcome = await scrape();
+	} catch (err) {
+		thrown = errorMessage(err);
+	}
+	return { id, outcome, thrown, scrapeMs: Date.now() - startedAt };
+}
+
 /**
  * Scrape + ingest ONE source, turning any throw into a recorded failure.
  *
- * `run.ts` drives every source of the district from here in a single process,
- * so an exception escaping a source used to abort the whole batch: the sources
+ * An exception escaping a source used to abort the whole batch: the sources
  * after it were never scraped, and the throwing source got no `scrape_runs`
  * row at all (the batch died before `ingest`). Sources are independent, so a
  * dead one is data to report, not an exit condition.
@@ -92,17 +120,39 @@ export async function runSource(
 	scrape: () => Promise<ScrapeOutcome>,
 	ingestFn: IngestFn = ingestSource,
 ): Promise<SourceRun> {
-	const startedAt = Date.now();
-	let outcome: ScrapeOutcome = { events: [], failures: 0, firstError: null };
-	let thrown: string | null = null;
+	return ingestScraped(await scrapeSource(id, scrape), ingestFn);
+}
 
-	try {
-		outcome = await scrape();
-	} catch (err) {
-		thrown = errorMessage(err);
+/** Default number of sources scraped at once. */
+export const DEFAULT_SCRAPE_CONCURRENCY = 3;
+
+/**
+ * Parse the scrape concurrency knob (`SCRAPE_CONCURRENCY`). Unset or empty
+ * gives the default; anything that is not a positive integer throws, so a
+ * typo is loud instead of silently serial.
+ */
+export function parseConcurrency(value: string | undefined | null): number {
+	if (value == null || value.trim() === "") return DEFAULT_SCRAPE_CONCURRENCY;
+	const n = Number(value);
+	if (!Number.isInteger(n) || n < 1) {
+		throw new Error(
+			`invalid SCRAPE_CONCURRENCY "${value}": want an integer >= 1`,
+		);
 	}
+	return n;
+}
+
+/**
+ * Phase 2 of a source's run: ingest the scraped events (one writer at a time,
+ * so callers must serialize it) and commit the source's state (C7). Never
+ * rejects.
+ */
+export async function ingestScraped(
+	phase: ScrapePhase,
+	ingestFn: IngestFn = ingestSource,
+): Promise<SourceRun> {
+	const { id, outcome, thrown, scrapeMs } = phase;
 	const { events, failures, firstError } = outcome;
-	const scrapeMs = Date.now() - startedAt;
 
 	// A thrown scrape counts as one failure, so a run row is never "ok" with
 	// zero items when in fact the source never produced anything.
@@ -138,7 +188,8 @@ export async function runSource(
 		return {
 			...head,
 			status: "failed",
-			elapsedMs: Date.now() - startedAt,
+			// Scrape + ingest time; queueing behind other sources is not counted.
+			elapsedMs: scrapeMs + (Date.now() - ingestStarted),
 			ingestMs: Date.now() - ingestStarted,
 			new: 0,
 			updated: 0,
@@ -180,7 +231,7 @@ export async function runSource(
 	return {
 		...head,
 		status,
-		elapsedMs: Date.now() - startedAt,
+		elapsedMs: scrapeMs + ingestMs,
 		ingestMs,
 		new: result.itemsNew,
 		updated: result.itemsUpdated,
@@ -221,6 +272,11 @@ export interface BatchReport {
 
 export interface BatchDeps {
 	ingestFn?: IngestFn;
+	/**
+	 * How many sources may be in their scrape phase at once (default 3).
+	 * Ingest is always serial, in the order the sources were given.
+	 */
+	concurrency?: number;
 	postPasses?: () => Promise<PostPassOutcome>;
 	recordPostPasses?: (
 		runIds: readonly number[],
@@ -231,9 +287,15 @@ export interface BatchDeps {
 
 /**
  * Run a batch of sources, then the global post-passes ONCE (C8), whatever the
- * batch size. Sources run strictly one after the other (one writer). Each
- * source's JSON line is logged as it finishes, then the post-pass timings,
- * then any ALERT lines.
+ * batch size.
+ *
+ * The scrape phases (different hosts, each source paced by its own fetch
+ * gate) overlap, at most `concurrency` at a time, started in registry order.
+ * The ingest phases (one transaction writer per source) stay strictly serial
+ * and in registry order, each waiting for its own scrape, so the report, the
+ * `scrape_runs` ids and the logs are deterministic. A source's state commit
+ * still follows its own ingest. Each source's JSON line is logged as its
+ * ingest finishes, then the post-pass timings, then any ALERT lines.
  */
 export async function runBatch(
 	sources: readonly (readonly [string, () => Promise<ScrapeOutcome>])[],
@@ -242,8 +304,28 @@ export async function runBatch(
 	const log = deps.log ?? ((line: string) => console.log(line));
 	const started = Date.now();
 	const runs: SourceRun[] = [];
-	for (const [id, scrape] of sources) {
-		const run = await runSource(id, scrape, deps.ingestFn);
+	const concurrency = Math.max(
+		1,
+		Math.floor(deps.concurrency ?? DEFAULT_SCRAPE_CONCURRENCY),
+	);
+	const phases = sources.map(() => Promise.withResolvers<ScrapePhase>());
+	let next = 0;
+	// Each worker takes the next source in registry order as soon as it is
+	// free. `scrapeSource` never rejects, so a worker cannot die mid-queue.
+	const worker = async (): Promise<void> => {
+		while (next < sources.length) {
+			const i = next++;
+			const entry = sources[i];
+			if (entry == null) break;
+			phases[i]?.resolve(await scrapeSource(entry[0], entry[1]));
+		}
+	};
+	for (let w = 0; w < Math.min(concurrency, sources.length); w++) void worker();
+
+	for (let i = 0; i < sources.length; i++) {
+		const phase = await phases[i]?.promise;
+		if (phase == null) continue;
+		const run = await ingestScraped(phase, deps.ingestFn);
 		runs.push(run);
 		log(JSON.stringify(run, null, 2));
 	}

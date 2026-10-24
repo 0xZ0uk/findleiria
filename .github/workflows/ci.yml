@@ -23,21 +23,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # Third-party actions are pinned to a major version tag. Pinning to a full
-      # commit SHA is the stricter option if supply-chain hardening is wanted.
-      - uses: actions/checkout@v7
+      # Every action is pinned to a full commit SHA (a tag can be moved to
+      # malicious code; a SHA cannot). The trailing comment is the release it
+      # was resolved from; bump both together.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # No `version:` input: pnpm/action-setup reads it from `packageManager`.
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       # varlock needs Node >= 22.3.
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
 
       # The server, db and auth tests run on `bun test`; README asks for Bun 1.4+.
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.x
 

@@ -7,11 +7,9 @@ import { mergeSameDaySessions } from "../grouping";
 /**
  * Plain (db, input) query functions — SLICE_8.
  *
- * Two callers run identical SQL through these: the dev-only tRPC router in
- * `../routers/events.ts` (a thin wrapper) and the build-time snapshot in
- * `../snapshot.ts`, which turns their output into the static JSON the SPA
- * reads. No browser code imports this module at runtime; the web app only
- * borrows its types.
+ * The build-time snapshot in `../snapshot.ts` runs these once and turns their
+ * output into the static JSON the SPA reads. No browser code imports this
+ * module at runtime; the web app only borrows its types.
  */
 export type { Db };
 
@@ -115,7 +113,6 @@ export const listInput = z.object({
 	limit: z.number().int().min(1).max(WINDOW_MAX).default(WINDOW_MAX),
 	offset: z.number().int().min(0).default(0),
 	venueSlug: z.string().optional(),
-	category: z.string().optional(),
 	dateFrom: z.number().int().optional(),
 	dateTo: z.number().int().optional(),
 	city: z.string().optional(),
@@ -131,11 +128,6 @@ export async function listEvents(db: Db, input: ListInput) {
 	}
 	if (input.venueSlug) {
 		conditions.push(eq(schema.venues.slug, input.venueSlug));
-	}
-	if (input.category) {
-		conditions.push(
-			sql`${schema.events.categories} like ${`%"${input.category}"%`}`,
-		);
 	}
 	if (input.dateFrom !== undefined) {
 		conditions.push(gte(schema.events.start_at, input.dateFrom));
@@ -160,21 +152,6 @@ export async function listEvents(db: Db, input: ListInput) {
 
 	const merged = toPublicEventList(rows);
 	return merged.slice(input.offset, input.offset + input.limit);
-}
-
-export async function eventsByDay(db: Db) {
-	const now = Math.floor(Date.now() / 1000);
-
-	const rows = await db
-		.select(eventSelect)
-		.from(schema.events)
-		.leftJoin(schema.venues, eq(schema.events.venue_id, schema.venues.id))
-		.where(
-			and(gte(schema.events.start_at, now), isNull(schema.events.date_text)),
-		)
-		.orderBy(schema.events.start_at);
-
-	return toPublicEventList(rows);
 }
 
 export async function undatedEvents(db: Db) {
@@ -268,18 +245,6 @@ export async function eventDirectory(db: Db) {
 		.orderBy(desc(schema.events.start_at));
 
 	return rows.map(toPublicEventDetail);
-}
-
-export async function venues(db: Db) {
-	return db
-		.select({
-			id: schema.venues.id,
-			name: schema.venues.name,
-			slug: schema.venues.slug,
-			city: schema.venues.city,
-		})
-		.from(schema.venues)
-		.orderBy(schema.venues.name);
 }
 
 export async function eventStats(db: Db) {

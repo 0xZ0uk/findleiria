@@ -116,6 +116,18 @@ export function startOfLisbonDay(nowMs: number = Date.now()): number {
 	return Math.floor((midnightUtc - lisbonOffsetMs(midnightUtc)) / 1000);
 }
 
+/**
+ * Epoch seconds of the next 00:00 Lisbon, strictly after `nowMs`.
+ *
+ * Aims at the middle of tomorrow (36h past today's midnight; a DST day is 23
+ * or 25h, so that is still tomorrow) and takes that day's start, which keeps
+ * the answer right across a clock change.
+ */
+export function nextLisbonMidnight(nowMs: number = Date.now()): number {
+	const today = startOfLisbonDay(nowMs);
+	return startOfLisbonDay((today + 36 * 3600) * 1000);
+}
+
 /** `19:30` */
 export function clock(epochSeconds: number): string {
 	return clockFormatter.format(toDate(epochSeconds));

@@ -20,12 +20,14 @@ import {
 	dayKey,
 	dayMonth,
 	lastRunLabel,
+	nextLisbonMidnight,
 	shiftDayKey,
 	startOfLisbonDay,
 	weekday,
 } from "@/utils/format";
 import { LOCATION_CHANGE_EVENT } from "@/utils/route";
 import { eventsInWindow } from "@/utils/snapshot";
+import { type VenueFacetItem, venueLabels } from "@/utils/venue-label";
 
 /** How far ahead the page looks. Shared with the snapshot that feeds it. */
 const WINDOW_DAYS = AGENDA_WINDOW_DAYS;
@@ -76,8 +78,10 @@ export type AnnouncementRow = {
 	imageUrl: string | null;
 	venueName: string | null;
 	venueCity: string | null;
+	venueSlug: string | null;
 	categories: string[];
 	dateText: string;
+	/** Pre-normalised `title venue city date categories`, for the search box. */
 	haystack: string;
 };
 
@@ -219,6 +223,7 @@ function toAnnouncement(event: UndatedEvent): AnnouncementRow {
 		imageUrl: event.imageUrl,
 		venueName: event.venueName,
 		venueCity: event.venueCity,
+		venueSlug: event.venueSlug,
 		categories,
 		dateText: event.dateText ?? "Data por marcar",
 		haystack: searchable(
@@ -242,6 +247,72 @@ function matches(row: AgendaRow, filters: Filters, needle: string): boolean {
 	if (filters.from && key < filters.from) return false;
 	if (filters.to && key > filters.to) return false;
 	return true;
+}
+
+/**
+ * The same search, concelho, type and venue tests as `matches`, for the undated
+ * announcements. The date range is left out on purpose: an announcement has no
+ * day, so it can be neither inside nor outside a range.
+ */
+function matchesAnnouncement(
+	row: AnnouncementRow,
+	filters: Filters,
+	needle: string,
+): boolean {
+	if (needle && !row.haystack.includes(needle)) return false;
+	if (filters.city && concelhoOf(row.venueCity) !== filters.city) return false;
+	if (filters.category && !row.categories.includes(filters.category))
+		return false;
+	if (filters.venue && row.venueSlug !== filters.venue) return false;
+	return true;
+}
+
+/**
+ * The Lisbon midnight "today" starts at, kept current.
+ *
+ * A tab left open past midnight would keep calling yesterday "Hoje", so this
+ * re-reads the clock at the next Lisbon midnight and whenever the tab becomes
+ * visible again (timers are throttled or frozen in background tabs, so the
+ * timeout alone can fire late). The value only changes when the day does, so
+ * nothing downstream recomputes in between.
+ */
+function useLisbonDayStart(): number {
+	const [dayStart, setDayStart] = useState(() => startOfLisbonDay());
+
+	useEffect(() => {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+
+		const sync = () => {
+			const now = startOfLisbonDay();
+			setDayStart((current) => (current === now ? current : now));
+		};
+		const arm = () => {
+			clearTimeout(timer);
+			// A second of slack so the timer never lands just before midnight.
+			const wait = nextLisbonMidnight() * 1000 - Date.now() + 1000;
+			timer = setTimeout(
+				() => {
+					sync();
+					arm();
+				},
+				Math.max(wait, 1000),
+			);
+		};
+		const onVisible = () => {
+			if (document.visibilityState !== "visible") return;
+			sync();
+			arm();
+		};
+
+		arm();
+		document.addEventListener("visibilitychange", onVisible);
+		return () => {
+			clearTimeout(timer);
+			document.removeEventListener("visibilitychange", onVisible);
+		};
+	}, []);
+
+	return dayStart;
 }
 
 function groupByDay(
@@ -295,6 +366,34 @@ function tally(
 }
 
 /**
+ * The "Local" options: one per venue, labelled with its town where two venues
+ * share a name (see `venueLabels`). The labels are settled before the tally,
+ * because the label is part of its tie-break.
+ */
+function venueFacet(rows: AgendaRow[]): Facet[] {
+	const venues: VenueFacetItem[] = [];
+	for (const row of rows) {
+		if (row.venueSlug && row.venueName)
+			venues.push({
+				slug: row.venueSlug,
+				name: row.venueName,
+				city: row.venueCity,
+			});
+	}
+	const labels = venueLabels(venues);
+	return tally(rows, (row) =>
+		row.venueSlug && row.venueName
+			? [
+					{
+						value: row.venueSlug,
+						label: labels.get(row.venueSlug) ?? row.venueName,
+					},
+				]
+			: [],
+	);
+}
+
+/**
  * The whole page model: one snapshot read plus browser-side facets.
  *
  * The snapshot is a day old at worst and wider than the window on both sides,
@@ -306,8 +405,8 @@ function tally(
  * server would drop a facet's own options the moment you picked one.
  */
 export function useAgenda() {
+	const from = useLisbonDayStart();
 	const range = useMemo(() => {
-		const from = startOfLisbonDay();
 		const todayKey = dayKey(from);
 		return {
 			from,
@@ -316,7 +415,7 @@ export function useAgenda() {
 			todayKey,
 			tomorrowKey: shiftDayKey(todayKey, 1),
 		};
-	}, []);
+	}, [from]);
 
 	const agendaQuery = useQuery(api.agenda.queryOptions());
 	const snapshot = agendaQuery.data;
@@ -471,18 +570,23 @@ export function useAgenda() {
 					label: category,
 				})),
 			),
-			venues: tally(rows, (row) =>
-				row.venueSlug && row.venueName
-					? [{ value: row.venueSlug, label: row.venueName }]
-					: [],
-			),
+			venues: venueFacet(rows),
 		}),
 		[rows],
 	);
 
-	const announcements = useMemo(
+	const allAnnouncements = useMemo(
 		() => (snapshot?.undated ?? []).map(toAnnouncement),
 		[snapshot],
+	);
+	const announcements = useMemo(
+		() =>
+			hasFacet
+				? allAnnouncements.filter((row) =>
+						matchesAnnouncement(row, filters, needle),
+					)
+				: allAnnouncements,
+		[allAnnouncements, hasFacet, filters, needle],
 	);
 
 	/**
@@ -553,7 +657,6 @@ export function useAgenda() {
 		facets: available,
 		filters,
 		setFilter,
-		applyFilters,
 		clearFilters,
 		setPeriod,
 		vista,
@@ -561,7 +664,6 @@ export function useAgenda() {
 		preset,
 		activeCount,
 		isFiltered: activeCount > 0,
-		dia,
 		rangeBounds: {
 			min: range.todayKey,
 			max: lastRow ? lastRow.dayKey : range.todayKey,
@@ -570,7 +672,6 @@ export function useAgenda() {
 		lastRunLabel: snapshot?.stats.lastRunAt
 			? lastRunLabel(snapshot.stats.lastRunAt)
 			: null,
-		lastRunAt: snapshot?.stats.lastRunAt ?? null,
 		status: (agendaQuery.isPending
 			? "loading"
 			: agendaQuery.isError

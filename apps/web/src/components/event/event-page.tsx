@@ -68,6 +68,7 @@ export function EventPage({ slug }: { slug: string }) {
 		return (
 			<main className={`${SHELL} py-8`}>
 				<AgendaError
+					what="o evento"
 					message={
 						event.error instanceof Error
 							? event.error.message

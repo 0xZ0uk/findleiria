@@ -14,6 +14,7 @@
 	},
 	"scripts": {
 		"check-types": "tsc --noEmit",
+		"test": "bun test",
 		"db:local": "turso dev --db-file local.db",
 		"db:push": "varlock run -- drizzle-kit push",
 		"db:generate": "varlock run -- drizzle-kit generate",
@@ -30,9 +31,7 @@
 	"dependencies": {
 		"@events-tracker/env": "workspace:*",
 		"@libsql/client": "0.17.4",
-		"drizzle-orm": "^0.45.2",
-		"libsql": "catalog:",
-		"zod": "catalog:"
+		"drizzle-orm": "^0.45.2"
 	},
 	"devDependencies": {
 		"@events-tracker/config": "workspace:*",

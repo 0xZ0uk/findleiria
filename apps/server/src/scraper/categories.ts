@@ -164,7 +164,30 @@ export function canonicalizeCategories(raw: string[]): string[] {
 			out.add(label);
 		}
 	}
-	return [...out].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, "pt"));
+	return sortCategories(out);
+}
+
+/**
+ * The single display ordering for category lists: taxonomy order, then
+ * alphabetical within unknowns. Dedupes. Used by insert, update-merge and
+ * reconcile so the stored order never depends on the write path.
+ */
+export function sortCategories(labels: Iterable<string>): string[] {
+	return [...new Set(labels)].sort(
+		(a, b) => rank(a) - rank(b) || a.localeCompare(b, "pt"),
+	);
+}
+
+/** Order-insensitive equality of two category lists (as sets). */
+export function sameCategories(
+	a: readonly string[],
+	b: readonly string[],
+): boolean {
+	const sa = new Set(a);
+	const sb = new Set(b);
+	if (sa.size !== sb.size) return false;
+	for (const x of sa) if (!sb.has(x)) return false;
+	return true;
 }
 
 /**

@@ -149,7 +149,7 @@ export function EventRow({
 
 			{href
 				? sourceLink(
-						"relative z-20 col-start-4 row-start-1 mt-1 hidden items-center justify-center text-muted-foreground/60 group-hover:text-foreground motion-safe:transition-colors sm:flex",
+						"relative z-20 col-start-4 row-start-1 mt-1 hidden items-center justify-center text-control group-hover:text-foreground motion-safe:transition-colors sm:flex",
 					)
 				: null}
 

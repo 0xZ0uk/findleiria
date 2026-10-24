@@ -12,7 +12,7 @@
 		"check-types": "turbo run check-types",
 		"typecheck": "turbo run check-types",
 		"test": "turbo run test",
-		"lint": "biome ci .",
+		"lint": "biome ci --error-on-warnings .",
 		"dev:web": "turbo run dev -F web --",
 		"dev:server": "turbo run dev -F server --",
 		"db:push": "turbo run db:push -F @events-tracker/db --",
@@ -27,9 +27,7 @@
 	},
 	"dependencies": {
 		"@events-tracker/auth": "workspace:*",
-		"@events-tracker/env": "workspace:*",
-		"hono": "catalog:",
-		"zod": "catalog:"
+		"hono": "catalog:"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.11",

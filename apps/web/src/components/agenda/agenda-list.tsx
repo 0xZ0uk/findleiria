@@ -49,6 +49,7 @@ export function AgendaList({ agenda }: { agenda: Agenda }) {
 	if (agenda.status === "error")
 		return (
 			<AgendaError
+				what="a agenda"
 				message={
 					agenda.error instanceof Error
 						? agenda.error.message

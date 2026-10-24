@@ -135,6 +135,7 @@ export function parseCartaz(text: string): Map<string, CartazItem> {
 		if (!p.id) {
 			continue;
 		}
+		const tipo = p.meta?.tipo;
 		out.set(String(p.id), {
 			id: p.id,
 			slug: p.slug ?? "",
@@ -142,9 +143,7 @@ export function parseCartaz(text: string): Map<string, CartazItem> {
 			title: decodeEntities((p.title?.rendered ?? "").trim()),
 			localidade: Array.isArray(p.localidade) ? p.localidade.map(Number) : [],
 			tipo: decodeEntities(
-				Array.isArray(p.meta?.tipo)
-					? p.meta!.tipo!.join(" ")
-					: String(p.meta?.tipo ?? ""),
+				Array.isArray(tipo) ? tipo.join(" ") : String(tipo ?? ""),
 			),
 		});
 	}

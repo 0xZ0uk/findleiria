@@ -403,3 +403,95 @@ describe("S13 scrape(): happy path and failure paths", () => {
 		);
 	});
 });
+
+describe("pages that never parse stop being refetched", () => {
+	const BASE = "https://festasearraiais.pt/eventos";
+	const NO_LD = `${BASE}/festa-sem-ld-2026-leiria-4`;
+	const NO_NAME = `${BASE}/festa-sem-nome-2026-leiria-6`;
+	const index =
+		"<sitemapindex><sitemap><loc>https://festasearraiais.pt/sitemap-eventos.xml</loc></sitemap></sitemapindex>";
+	const sitemap = `<urlset>${[NO_LD, NO_NAME]
+		.map(
+			(u) =>
+				`<url><loc>${u}</loc><lastmod>2026-07-17T00:00:00Z</lastmod></url>`,
+		)
+		.join("")}</urlset>`;
+	const nameless = `<script type="application/ld+json">${JSON.stringify({
+		"@type": "Event",
+		startDate: "2026-09-20",
+	})}</script>`;
+	const pages = new Map([
+		[NO_LD, "<html><body>sem json-ld</body></html>"],
+		[NO_NAME, nameless],
+	]);
+
+	/** State persisted between simulated runs, like state/festasearraiais.json. */
+	function simulate(initial: { seen: string[] } = { seen: [] }) {
+		let state: { seen: string[]; attempts?: Record<string, number> } = initial;
+		const runOnce = async () => {
+			const fetched: string[] = [];
+			const res = await scrape(
+				{
+					fetchText: async (u) => {
+						fetched.push(u);
+						if (u.endsWith("/sitemap.xml")) return index;
+						if (u.endsWith("sitemap-eventos.xml")) return sitemap;
+						const html = pages.get(u);
+						if (html === undefined) throw new Error(`GET ${u} -> HTTP 500`);
+						return html;
+					},
+					sleep: async () => {},
+					loadState: () => state,
+					saveState: (s) => {
+						state = s;
+					},
+					now: 0,
+				},
+				isLeiriaDistrict,
+			);
+			res.commit?.();
+			return {
+				res,
+				detailFetches: fetched.filter((u) => u.includes("/eventos/")),
+			};
+		};
+		return { runOnce, getState: () => state };
+	}
+
+	test("3 failed parses give the url up: seen, reported once by name, never refetched", async () => {
+		const sim = simulate();
+
+		// Runs 1 and 2: both pages are retried; the LD-less one is reported each
+		// time (as it always was), the nameless one stays silent.
+		for (const attempt of [1, 2]) {
+			const { res, detailFetches } = await sim.runOnce();
+			expect([...detailFetches].sort()).toEqual([NO_LD, NO_NAME].sort());
+			expect(sim.getState().attempts).toEqual({
+				[NO_LD]: attempt,
+				[NO_NAME]: attempt,
+			});
+			expect(sim.getState().seen).toEqual([]);
+			expect(res.failures).toBe(1);
+		}
+
+		// Run 3: both reach the cap: one counted failure each, naming the url.
+		const third = await sim.runOnce();
+		expect(third.res.failures).toBe(2);
+		expect(third.res.firstError).toContain("unparseable after 3 attempts");
+		expect(third.res.firstError).toContain(BASE);
+		expect([...sim.getState().seen].sort()).toEqual([NO_LD, NO_NAME].sort());
+		expect(sim.getState().attempts).toEqual({});
+
+		// Run 4: nothing left to fetch, nothing to report.
+		const fourth = await sim.runOnce();
+		expect(fourth.detailFetches).toEqual([]);
+		expect(fourth.res.failures).toBe(0);
+		expect(fourth.res.firstError).toBeNull();
+	});
+
+	test("a state file from before attempts existed loads and counts from zero", async () => {
+		const sim = simulate({ seen: [] });
+		await sim.runOnce();
+		expect(sim.getState().attempts?.[NO_LD]).toBe(1);
+	});
+});

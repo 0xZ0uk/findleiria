@@ -20,14 +20,12 @@
         document.documentElement.classList.add(theme);
         document.documentElement.style.colorScheme = theme;
         document.querySelector('meta[name="theme-color"]').setAttribute("content", theme === "light" ? "#ffffff" : "#0a0a0a");
-      } catch (e) {}
+      } catch {}
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@700;800&family=Karla:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Self-hosted (see public/fonts/OFL.txt). The two used above the fold are
+         preloaded; font files need `crossorigin` even same-origin. -->
+    <link rel="preload" href="/fonts/karla-latin-var.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/schibsted-grotesk-latin-var.woff2" as="font" type="font/woff2" crossorigin />
   </head>
 
   <body>

@@ -25,7 +25,7 @@ export function savedHref(): string {
 
 /** Internal link to the sign-in page, optionally back to where the reader was. */
 export function signInHref(redirectTo?: string): string {
-	if (!redirectTo || !redirectTo.startsWith("/") || redirectTo.startsWith("//"))
+	if (!redirectTo?.startsWith("/") || redirectTo.startsWith("//"))
 		return "/entrar";
 	return `/entrar?redirect=${encodeURIComponent(redirectTo)}`;
 }

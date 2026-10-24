@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-
+import { must } from "../test-helpers";
 import { isLeiriaDistrict } from "./district";
 import {
 	parseDetailLd,
@@ -45,18 +45,17 @@ describe("parseDetailLd (MusicEvent JSON-LD)", () => {
 
 describe("toRawEvent", () => {
 	test("maps the Pedrogão event with UTC epoch and image", () => {
-		const ld = parseDetailLd(detailHtml)!;
-		const raw = toRawEvent("last-friday-night-praia-do-pedrogao", ld);
-		expect(raw).not.toBeNull();
-		expect(raw!.slug).toBe("sg-last-friday-night-praia-do-pedrogao");
-		expect(raw!.title).toBe("Last Friday Night · Praia Do Pedrógão");
+		const ld = must(parseDetailLd(detailHtml));
+		const raw = must(toRawEvent("last-friday-night-praia-do-pedrogao", ld));
+		expect(raw.slug).toBe("sg-last-friday-night-praia-do-pedrogao");
+		expect(raw.title).toBe("Last Friday Night · Praia Do Pedrógão");
 		// 2026-09-04T21:00:00.000Z = 1788555600
-		expect(raw!.startAt).toBe(1788555600);
-		expect(raw!.city).toBe("Pedrogão");
-		expect(raw!.venueName).toBe("Praia Nova Beach Club");
+		expect(raw.startAt).toBe(1788555600);
+		expect(raw.city).toBe("Pedrogão");
+		expect(raw.venueName).toBe("Praia Nova Beach Club");
 		// SLICE_6: platform names are no longer injected as categories.
-		expect(raw!.categories).toEqual([]);
-		expect(raw!.url).toBe(
+		expect(raw.categories).toEqual([]);
+		expect(raw.url).toBe(
 			"https://shotgun.live/en/events/last-friday-night-praia-do-pedrogao",
 		);
 	});

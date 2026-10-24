@@ -43,7 +43,12 @@ export const LISTING_BASE = `${SITE}/salao-de-festas/`;
  */
 export const MAX_LISTING_PAGES = 10;
 export const MAX_DETAIL_REQUESTS = 400;
-/** Year-inference tolerance: a festa counts as "live" until 1 day past. */
+/**
+ * Year-inference tolerance: a festa counts as "live" until 1 day past. Gates
+ * WHICH YEAR a "22 de Agosto" belongs to (a festa that ended yesterday must
+ * stay in the current year, not roll to a phantom next-year one), so it is not
+ * a past filter that ingest would make redundant.
+ */
 export const YEAR_TOLERANCE_S = 86_400;
 /**
  * How far ahead a next-year candidate may sit before we call it a phantom.

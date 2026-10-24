@@ -25,13 +25,9 @@
 		"@events-tracker/auth": "workspace:*",
 		"@events-tracker/db": "workspace:*",
 		"@events-tracker/env": "workspace:*",
-		"@hono/trpc-server": "^0.4.2",
-		"@trpc/server": "catalog:",
 		"cheerio": "^1.2.0",
 		"hono": "catalog:",
-		"libsql": "catalog:",
-		"luxon": "^3.7.2",
-		"zod": "catalog:"
+		"luxon": "^3.7.2"
 	},
 	"devDependencies": {
 		"@events-tracker/config": "workspace:*",

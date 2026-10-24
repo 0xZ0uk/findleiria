@@ -46,8 +46,6 @@ export const COUNTY_BASE = `${SITE}/wp-json/wp/v2/county_mirror`;
 export const PER_PAGE = 100;
 /** Hard cap on listing pages walked (real source: 1 page, 64 rows). */
 export const MAX_PAGES = 3;
-/** An event is "live" until one day after its local end. */
-export const RETRO_TOLERANCE_S = 86_400;
 /** Descriptions are a teaser, not an article. */
 export const DESCRIPTION_LIMIT = 400;
 
@@ -234,7 +232,7 @@ export function toRawEvent(
 		23,
 		59,
 	);
-	if (endAt < now - RETRO_TOLERANCE_S) {
+	if (endAt < now) {
 		return { raw: null, reason: "past", inDistrict: [] };
 	}
 

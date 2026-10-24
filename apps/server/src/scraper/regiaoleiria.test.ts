@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { must } from "../test-helpers";
 
 /**
  * Região de Leiria fixtures — real API payloads captured 2026-09-11.
@@ -106,11 +107,10 @@ describe("parseWallClock (wall-clock Lisbon, no UTC marker)", () => {
 describe("parseCartaz / parseLocalidade", () => {
 	test("real Sept cartaz: 112 items, id→title link present", () => {
 		expect(cartaz.size).toBe(112);
-		const item = cartaz.get("416096");
-		expect(item).toBeDefined();
-		expect(item!.title).toContain("Odisseia");
-		expect(item!.link).toContain("/cartazes/odisseia26");
-		expect(item!.localidade).toContain(16706); // Castanheira de Pera
+		const item = must(cartaz.get("416096"));
+		expect(item.title).toContain("Odisseia");
+		expect(item.link).toContain("/cartazes/odisseia26");
+		expect(item.localidade).toContain(16706); // Castanheira de Pera
 	});
 
 	test("real Sept localidade: term id→name map", () => {
@@ -121,7 +121,7 @@ describe("parseCartaz / parseLocalidade", () => {
 
 describe("slugFor", () => {
 	test("rl- prefix on the cartaz slug", () => {
-		expect(slugFor(cartaz.get("416096")!)).toBe(
+		expect(slugFor(must(cartaz.get("416096")))).toBe(
 			"rl-odisseia26-em-castanheira-de-pera",
 		);
 	});
@@ -131,7 +131,7 @@ describe("toRawEvent", () => {
 	test("dates via Europe/Lisbon wall clock — Sept is WEST (UTC+1)", () => {
 		const raw = toRawEvent(
 			{ postId: "416096", date: "2026-09-25 07:00:00" },
-			cartaz.get("416096")!,
+			must(cartaz.get("416096")),
 			"Castanheira de Pera",
 		);
 		// Sept 2026 is WEST (summer, UTC+1): 07:00 Lisbon wall clock == 06:00 UTC.

@@ -6,12 +6,6 @@ settings:
 
 catalogs:
   default:
-    '@trpc/client':
-      specifier: ^11.18.0
-      version: 11.18.0
-    '@trpc/server':
-      specifier: ^11.18.0
-      version: 11.18.0
     '@types/bun':
       specifier: ^1.4.0
       version: 1.4.0
@@ -24,9 +18,6 @@ catalogs:
     hono:
       specifier: ^4.12.32
       version: 4.13.5
-    libsql:
-      specifier: 0.5.29
-      version: 0.5.29
     lucide-react:
       specifier: ^1.27.0
       version: 1.38.0
@@ -59,15 +50,9 @@ importers:
       '@events-tracker/auth':
         specifier: workspace:*
         version: link:packages/auth
-      '@events-tracker/env':
-        specifier: workspace:*
-        version: link:packages/env
       hono:
         specifier: 'catalog:'
         version: 4.13.5
-      zod:
-        specifier: 'catalog:'
-        version: 4.5.4
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.11
@@ -102,27 +87,15 @@ importers:
       '@events-tracker/env':
         specifier: workspace:*
         version: link:../../packages/env
-      '@hono/trpc-server':
-        specifier: ^0.4.2
-        version: 0.4.2(@trpc/server@11.18.0(typescript@6.0.3))(hono@4.13.5)
-      '@trpc/server':
-        specifier: 'catalog:'
-        version: 11.18.0(typescript@6.0.3)
       cheerio:
         specifier: ^1.2.0
         version: 1.2.0
       hono:
         specifier: 'catalog:'
         version: 4.13.5
-      libsql:
-        specifier: 'catalog:'
-        version: 0.5.29
       luxon:
         specifier: ^3.7.2
         version: 3.7.2
-      zod:
-        specifier: 'catalog:'
-        version: 4.5.4
     devDependencies:
       '@events-tracker/config':
         specifier: workspace:*
@@ -227,15 +200,6 @@ importers:
       '@events-tracker/db':
         specifier: workspace:*
         version: link:../db
-      '@events-tracker/env':
-        specifier: workspace:*
-        version: link:../env
-      '@trpc/client':
-        specifier: 'catalog:'
-        version: 11.18.0(@trpc/server@11.18.0(typescript@6.0.3))(typescript@6.0.3)
-      '@trpc/server':
-        specifier: 'catalog:'
-        version: 11.18.0(typescript@6.0.3)
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@libsql/client@0.17.4)(bun-types@1.4.0)(kysely@0.29.5)
@@ -246,9 +210,6 @@ importers:
       '@events-tracker/config':
         specifier: workspace:*
         version: link:../config
-      hono:
-        specifier: 'catalog:'
-        version: 4.13.5
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -270,9 +231,6 @@ importers:
       hono:
         specifier: 'catalog:'
         version: 4.13.5
-      libsql:
-        specifier: 'catalog:'
-        version: 0.5.29
       nodemailer:
         specifier: ^10.2.1
         version: 10.2.1
@@ -309,12 +267,6 @@ importers:
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@libsql/client@0.17.4)(bun-types@1.4.0)(kysely@0.29.5)
-      libsql:
-        specifier: 'catalog:'
-        version: 0.5.29
-      zod:
-        specifier: 'catalog:'
-        version: 4.5.4
     devDependencies:
       '@events-tracker/config':
         specifier: workspace:*
@@ -1187,13 +1139,6 @@ packages:
     peerDependencies:
       hono: ^4
 
-  '@hono/trpc-server@0.4.2':
-    resolution: {integrity: sha512-3TDrc42CZLgcTFkXQba+y7JlRWRiyw1AqhLqztWyNS2IFT+3bHld0lxKdGBttCtGKHYx0505dM67RMazjhdZqw==}
-    engines: {node: '>=16.0.0'}
-    peerDependencies:
-      '@trpc/server': ^10.10.0 || >11.0.0-rc
-      hono: '>=4.0.0'
-
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
 
@@ -1619,19 +1564,6 @@ packages:
     resolution: {integrity: sha512-TYBea4OuXWD7MhaSHq069TWbFe7rcwWN6kzT7JF0OKi1K6c1gTv2IzD6A6ExJsCMozdkqBWeuIUZmu4KQg0O5A==}
     peerDependencies:
       react: ^18 || ^19
-
-  '@trpc/client@11.18.0':
-    resolution: {integrity: sha512-wOqeg3Fvl25V1ZisQhUD3K8G60ZJDlSGJNSyeXrLH24xAo5w6GSR2Kzb1cSNY9Y+IQ2YZvYGZstBU+V/ulo/ow==}
-    hasBin: true
-    peerDependencies:
-      '@trpc/server': 11.18.0
-      typescript: '>=5.7.2'
-
-  '@trpc/server@11.18.0':
-    resolution: {integrity: sha512-JAvXOuNTxgXjIDfQaOvDq1j66LMNfDJUH1IU7Slfn8EvRv2EkH6ehu3A7zpYhjO0syHHiYg77v2lG2JFJgvw7Q==}
-    hasBin: true
-    peerDependencies:
-      typescript: '>=5.7.2'
 
   '@ts-morph/common@0.27.0':
     resolution: {integrity: sha512-Wf29UqxWDpc+i61k3oIOzcUfQt79PIT9y/MWfAGlrkjg6lBC1hwDECLXPVJAhWjiGbfBCxZd65F/LIZF3+jeJQ==}
@@ -4358,11 +4290,6 @@ snapshots:
     dependencies:
       hono: 4.13.5
 
-  '@hono/trpc-server@0.4.2(@trpc/server@11.18.0(typescript@6.0.3))(hono@4.13.5)':
-    dependencies:
-      '@trpc/server': 11.18.0(typescript@6.0.3)
-      hono: 4.13.5
-
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
       '@jridgewell/sourcemap-codec': 1.6.0
@@ -4684,15 +4611,6 @@ snapshots:
     dependencies:
       '@tanstack/query-core': 5.102.8
       react: 19.2.8
-
-  '@trpc/client@11.18.0(@trpc/server@11.18.0(typescript@6.0.3))(typescript@6.0.3)':
-    dependencies:
-      '@trpc/server': 11.18.0(typescript@6.0.3)
-      typescript: 6.0.3
-
-  '@trpc/server@11.18.0(typescript@6.0.3)':
-    dependencies:
-      typescript: 6.0.3
 
   '@ts-morph/common@0.27.0':
     dependencies:

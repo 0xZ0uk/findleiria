@@ -21,11 +21,24 @@
  * The daily job (`pnpm --filter server daily`) runs this after the scrape.
  * Schema: every local column of the mirrored tables is published, so Turso
  * must be migrated as far as local.db (`db:migrate` against Turso, see the
- * README); a missing column fails the publish before anything is written.
+ * README); a missing column or index fails the publish before anything is
+ * written (indexes carry no data, but a migration that adds one must reach
+ * Turso too, or its queries silently scan).
+ *
+ * Retention: scrape_runs older than 90 days are pruned from local.db first
+ * (each source keeps its latest run), and the mirror carries that to Turso.
  */
 import { Database } from "bun:sqlite";
 
 import { createClient } from "@libsql/client";
+
+import {
+	findMissingIndexes,
+	INDEX_QUERY,
+	pruneScrapeRuns,
+	SCRAPE_RUNS_RETENTION_DAYS,
+	toIndexInfo,
+} from "./publish-lib";
 
 /** Parents first: inserts in this order, deletes in reverse. */
 const TABLES = ["venues", "events", "event_sources", "scrape_runs"] as const;
@@ -63,6 +76,21 @@ if (!tursoUrl || !tursoToken) {
 	process.exit(1);
 }
 
+// Retention first, through a short-lived writable handle: the mirror itself
+// reads local.db read-only. Housekeeping must never block a publish.
+try {
+	const writable = new Database(localPath);
+	const pruned = pruneScrapeRuns(writable, Math.floor(Date.now() / 1000));
+	writable.close();
+	if (pruned > 0) {
+		console.log(
+			`scrape_runs: pruned ${pruned} rows older than ${SCRAPE_RUNS_RETENTION_DAYS} days`,
+		);
+	}
+} catch (err) {
+	console.warn("scrape_runs retention skipped:", err);
+}
+
 const local = new Database(localPath, { readonly: true });
 
 const classified: readonly string[] = [...TABLES, ...LOCAL_ONLY_TABLES];
@@ -85,6 +113,22 @@ const turso = createClient({ url: tursoUrl, authToken: tursoToken });
 const statements: { sql: string; args: (string | number | null)[] }[] = [];
 for (const table of [...TABLES].reverse()) {
 	statements.push({ sql: `DELETE FROM ${table}`, args: [] });
+}
+
+// Indexes first, for all tables, so the guidance covers everything at once.
+const localIndexes = local
+	.query<{ name: string; tbl: string }, []>(INDEX_QUERY)
+	.all()
+	.map(toIndexInfo);
+const remoteIndexes = (await turso.execute(INDEX_QUERY)).rows.map((r) =>
+	toIndexInfo({ name: r.name, tbl: r.tbl }),
+);
+const missingIndexes = findMissingIndexes(localIndexes, remoteIndexes, TABLES);
+if (missingIndexes.length > 0) {
+	console.error(
+		`Turso is missing indexes: ${missingIndexes.map((i) => `${i.name} (${i.table})`).join(", ")} — the local DB is migrated past Turso. Migrate Turso once, from the repo root:\n  DATABASE_URL='<TURSO_DATABASE_URL>' TURSO_AUTH_TOKEN='<TURSO_RW_TOKEN>' pnpm --filter @events-tracker/db db:migrate`,
+	);
+	process.exit(1);
 }
 
 const counts = new Map<Table, number>();

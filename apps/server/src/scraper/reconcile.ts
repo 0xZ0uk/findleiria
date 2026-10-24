@@ -1,6 +1,6 @@
 import { db, schema } from "@events-tracker/db";
 import { eq, inArray, isNull, notInArray } from "drizzle-orm";
-
+import { sortCategories } from "./categories";
 import type { Conn } from "./conn";
 import { deleteEvents } from "./event-delete";
 import { fingerprint } from "./fingerprint";
@@ -224,7 +224,7 @@ export async function reconcileIdentities(conn: Conn = db): Promise<number> {
 			await conn
 				.update(schema.events)
 				.set({
-					categories: [...catSet].sort(),
+					categories: sortCategories(catSet),
 					// Town-qualified like ingest's (C3), from the keeper's venue.
 					fingerprint: fingerprint(k.title, k.venue ?? "", k.start_at, k.city),
 					...(end != null && end !== k.end_at ? { end_at: end } : {}),

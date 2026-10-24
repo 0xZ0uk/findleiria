@@ -1,5 +1,5 @@
 // bun test for the OG card cache: key stability, reuse, eviction, cold start,
-// bounded concurrency. The renderer is a stub; og-card_test.mjs covers the real one.
+// bounded concurrency. The renderer is a stub; og-card.test.mjs covers the real one.
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import fs from "node:fs";

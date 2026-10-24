@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-
+import { must } from "../test-helpers";
 import { toEpochInLisbon } from "./fingerprint";
 import {
 	parseDetail,
@@ -283,7 +283,7 @@ describe("toRawEvent", () => {
 		const items = parseListingItems(listing("marinha-grande"), s);
 		const raw = toRawEvent(
 			s,
-			items[0]!.url,
+			must(items[0]).url,
 			parseDetail(detail("marinha-grande")),
 			NOW,
 		);
@@ -321,7 +321,7 @@ describe("toRawEvent", () => {
 		const items = parseListingItems(listing("ansiao"), s);
 		const raw = toRawEvent(
 			s,
-			items[0]!.url,
+			must(items[0]).url,
 			parseDetail(detail("ansiao")),
 			NOW,
 		);
@@ -471,7 +471,7 @@ describe("scrape (injected fetchText over the real fixtures)", () => {
 
 	test("S7: a council whose first page parses to zero items is a counted failure", async () => {
 		const base = fetchFor(null);
-		const batalha = SITES.find((s) => s.key === "batalha")!;
+		const batalha = must(SITES.find((s) => s.key === "batalha"));
 		const res = await scrape(
 			{
 				...deps([]),
@@ -520,5 +520,143 @@ describe("scrape (injected fetchText over the real fixtures)", () => {
 		for (const e of first.events) {
 			if (e.url !== victim) expect(seen.has(e.url)).toBe(true);
 		}
+	});
+
+	describe("S12: listing page counts come from the markup", () => {
+		const nazare = site("nazare");
+		const nazareListingRequests = (log: string[]) =>
+			log.filter((u) => u.startsWith(`${nazare.listing}?`)).length + 1;
+		const run = async (rewrite: (html: string) => string) => {
+			const log: string[] = [];
+			const base = fetchFor(null);
+			const res = await scrape(
+				{
+					...deps(allUrls),
+					fetchText: async (u: string) => {
+						log.push(u);
+						const html = await base(u);
+						return u.startsWith(nazare.listing) ? rewrite(html) : html;
+					},
+				},
+				() => true,
+			);
+			return { res, log };
+		};
+
+		test("the last page is read from page 1's paginator links", async () => {
+			// Nazaré advertises 71; pretend the council shrank to 5 pages.
+			const { log } = await run((html) =>
+				html.replace(/events_list_73_page=(\d+)/g, (m, n) =>
+					Number(n) > 5 ? "events_list_73_page=5" : m,
+				),
+			);
+			expect(nazareListingRequests(log)).toBe(5);
+		});
+
+		test("the hardcoded maxPages is an upper safety cap", async () => {
+			const { log } = await run((html) =>
+				html.replace(/events_list_73_page=71/g, "events_list_73_page=999"),
+			);
+			expect(nazareListingRequests(log)).toBe(nazare.maxPages);
+		});
+
+		test("an unreadable paginator falls back to the cap", async () => {
+			const { log } = await run((html) =>
+				html.replace(/events_list_73_page=/g, "events_list_73_p="),
+			);
+			expect(nazareListingRequests(log)).toBe(nazare.maxPages);
+		});
+
+		test("a council without a paginator fetches its single page", async () => {
+			const batalha = site("batalha");
+			const { log } = await run((html) => html);
+			expect(log.filter((u) => u.startsWith(batalha.listing))).toEqual([
+				batalha.listing,
+			]);
+		});
+	});
+
+	describe("pages that never parse stop being refetched", () => {
+		/** A persistent state file across simulated runs, like state/municipal.json. */
+		const simulate = (victim: string) => {
+			let state: { seen: string[]; attempts?: Record<string, number> } = {
+				seen: [],
+			};
+			const base = fetchFor(null);
+			const fetched: string[] = [];
+			const runOnce = async () => {
+				fetched.length = 0;
+				const res = await scrape(
+					{
+						...deps([]),
+						loadState: () => state,
+						saveState: (s) => {
+							state = s;
+						},
+						fetchText: async (u: string) => {
+							fetched.push(u);
+							return u === victim ? "<html><body></body></html>" : base(u);
+						},
+					},
+					(city) => city === "Batalha",
+				);
+				res.commit();
+				return res;
+			};
+			return { runOnce, fetched, getState: () => state };
+		};
+
+		test("3 failed parses mark the url seen, report it once, and stop refetching", async () => {
+			const victim = (await scrape(deps([]), () => true)).events[0]?.url ?? "";
+			expect(victim).not.toBe("");
+			const sim = simulate(victim);
+
+			for (const attempt of [1, 2]) {
+				const res = await sim.runOnce();
+				expect(sim.fetched).toContain(victim);
+				expect(sim.getState().attempts?.[victim]).toBe(attempt);
+				expect(sim.getState().seen).not.toContain(victim);
+				expect(res.failures).toBe(0);
+			}
+
+			const third = await sim.runOnce();
+			expect(sim.fetched).toContain(victim);
+			expect(third.failures).toBe(1);
+			expect(third.firstError).toContain(victim);
+			expect(third.firstError).toContain("unparseable after 3 attempts");
+			expect(sim.getState().seen).toContain(victim);
+			expect(sim.getState().attempts?.[victim]).toBeUndefined();
+
+			const fourth = await sim.runOnce();
+			expect(sim.fetched).not.toContain(victim);
+			expect(fourth.failures).toBe(0);
+		});
+
+		test("attempts are saved only on commit (C7)", async () => {
+			const victim = (await scrape(deps([]), () => true)).events[0]?.url ?? "";
+			let saved = 0;
+			const base = fetchFor(null);
+			const res = await scrape(
+				{
+					...deps([]),
+					saveState: () => {
+						saved++;
+					},
+					fetchText: async (u: string) =>
+						u === victim ? "<html><body></body></html>" : base(u),
+				},
+				() => true,
+			);
+			expect(saved).toBe(0);
+			res.commit();
+			expect(saved).toBe(1);
+		});
+
+		test("a state file from before attempts existed loads and counts from zero", async () => {
+			const victim = (await scrape(deps([]), () => true)).events[0]?.url ?? "";
+			const sim = simulate(victim);
+			await sim.runOnce();
+			expect(sim.getState().attempts?.[victim]).toBe(1);
+		});
 	});
 });

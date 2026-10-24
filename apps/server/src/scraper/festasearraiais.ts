@@ -2,6 +2,12 @@ import { DISTRICT_PLACE_NAMES, normalizePlace } from "./district";
 import { defaultFetchText } from "./http";
 import { createFetchGate } from "./lib/fetch-gate";
 import { findJsonLdEvent } from "./lib/jsonld";
+import {
+	giveUpMessage,
+	mergeAttempts,
+	type ParseAttempts,
+	recordParseFailure,
+} from "./lib/parse-attempts";
 import { ymdToEpoch } from "./lib/pt-dates";
 import { defaultSleep, randomDelay } from "./lib/timing";
 import { loadState, saveState } from "./state";
@@ -48,6 +54,12 @@ export interface FestasState {
 	 * leaves work behind.
 	 */
 	seen: string[];
+	/**
+	 * Failed parses (no JSON-LD Event, or one without a name or date) per url.
+	 * At MAX_PARSE_ATTEMPTS the url is given up on and moves into `seen`.
+	 * Optional: state files written before this existed lack it.
+	 */
+	attempts?: ParseAttempts;
 }
 
 export const DEFAULT_STATE: FestasState = { seen: [] };
@@ -356,6 +368,21 @@ export async function scrape(
 	// 3. detail per candidate (bounded), district-gate on addressLocality.
 	const events: RawEvent[] = [];
 	const handled: string[] = [];
+	/** This run's failed-parse counts, merged into the state on commit. */
+	const pendingAttempts: ParseAttempts = {};
+	/** A page that fetched but yielded no event: retried, then given up on. */
+	const parseFailed = (url: string, why: string, reportEach: boolean): void => {
+		const attempt = recordParseFailure(state.attempts, pendingAttempts, url);
+		if (attempt.exhausted) {
+			// Given up on: seen from now on, and reported once, by name.
+			handled.push(url);
+			failures++;
+			firstError ??= `${why}; ${giveUpMessage(url)}`;
+		} else if (reportEach) {
+			failures++;
+			firstError ??= why;
+		}
+	};
 	for (const c of candidates) {
 		if (capReached()) {
 			break;
@@ -371,12 +398,12 @@ export async function scrape(
 					if (isInScope(raw.city ?? raw.venueName)) {
 						events.push(raw);
 					}
+				} else {
+					parseFailed(c.url, `unusable JSON-LD Event on ${c.url}`, false);
 				}
 			} else {
-				failures++;
-				if (!firstError) {
-					firstError = `no JSON-LD Event on ${c.url}`;
-				}
+				// A page without an event block was always reported per attempt.
+				parseFailed(c.url, `no JSON-LD Event on ${c.url}`, true);
 			}
 		} catch (err) {
 			failures++;
@@ -399,6 +426,9 @@ export async function scrape(
 		pagesFetched,
 		discovered: all.length,
 		commit: () =>
-			deps.saveState({ seen: [...new Set([...state.seen, ...handled])] }),
+			deps.saveState({
+				seen: [...new Set([...state.seen, ...handled])],
+				attempts: mergeAttempts(state.attempts, pendingAttempts, handled),
+			}),
 	};
 }

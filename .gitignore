@@ -67,3 +67,6 @@ temp
 
 # local SQLite backups (never shipped)
 .backups/
+
+# review report HTML (generated, not committed)
+.plans/*.html

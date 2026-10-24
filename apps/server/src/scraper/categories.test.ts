@@ -3,6 +3,8 @@ import { describe, expect, test } from "bun:test";
 import {
 	CANONICAL_CATEGORIES,
 	canonicalizeCategories,
+	sameCategories,
+	sortCategories,
 	unknownCategory,
 } from "./categories";
 import { normalizeTitle } from "./normalize";
@@ -152,5 +154,27 @@ describe("labels the live database actually carried", () => {
 		expect(canonicalizeCategories(["Atividades ao Ar Livre"])).toEqual([
 			"Atividades ao Ar Livre",
 		]);
+	});
+});
+
+describe("C13: one display ordering for every write path", () => {
+	test("sortCategories follows the taxonomy order, unknowns last, deduped", () => {
+		// Alphabetical would be Concertos, Música, Teatro, Zumba.
+		expect(
+			sortCategories(["Zumba", "Teatro", "Concertos", "Música", "Música"]),
+		).toEqual(["Música", "Concertos", "Teatro", "Zumba"]);
+	});
+
+	test("canonicalizeCategories and sortCategories agree on the order", () => {
+		const labels = ["Teatro", "Concertos", "Música"];
+		expect(sortCategories(labels)).toEqual(canonicalizeCategories(labels));
+	});
+
+	test("sameCategories ignores order and duplicates", () => {
+		expect(sameCategories(["Teatro", "Música"], ["Música", "Teatro"])).toBe(
+			true,
+		);
+		expect(sameCategories(["Teatro"], ["Teatro", "Música"])).toBe(false);
+		expect(sameCategories([], [])).toBe(true);
 	});
 });

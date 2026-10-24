@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-
+import { must } from "../test-helpers";
 import { fingerprint } from "./fingerprint";
 import type { DetailEvent, ListingCard } from "./viralagenda";
 import { toRawEvent } from "./viralagenda";
@@ -41,17 +41,16 @@ const buggyDetail: DetailEvent = {
 
 describe("viralagenda card-first time policy (DST drift)", () => {
 	test("card time wins over the DST-shifted JSON-LD time", () => {
-		const raw = toRawEvent(card, buggyDetail);
-		expect(raw).not.toBeNull();
+		const raw = must(toRawEvent(card, buggyDetail));
 		// 2026-09-11 21:30 WEST.
-		expect(raw!.startAt).toBe(1789158600);
+		expect(raw.startAt).toBe(1789158600);
 	});
 
 	test("the corrected time hashes to the same fingerprint as leiriagenda's row", () => {
-		const raw = toRawEvent(card, buggyDetail)!;
+		const raw = must(toRawEvent(card, buggyDetail));
 		// leiriagenda stored the same show at 21:30 WEST.
 		expect(
-			fingerprint(raw.title, "teatro-jose-lucio-da-silva", raw.startAt!),
+			fingerprint(raw.title, "teatro-jose-lucio-da-silva", must(raw.startAt)),
 		).toBe(
 			fingerprint("Carolina de Deus", "teatro-jose-lucio-da-silva", 1789158600),
 		);
@@ -63,16 +62,18 @@ describe("viralagenda card-first time policy (DST drift)", () => {
 			dateStart: "2026-09-11T00:59:00+01:00",
 			hasTime: false,
 		};
-		const raw = toRawEvent(noTimeCard, buggyDetail);
+		const raw = must(toRawEvent(noTimeCard, buggyDetail));
 		// 20:30+01:00 parsed as an absolute instant → 19:30 UTC.
-		expect(raw!.startAt).toBe(1789155000);
+		expect(raw.startAt).toBe(1789155000);
 	});
 
 	test("no card time + no detail → date-only at midnight Lisbon", () => {
-		const raw = toRawEvent(
-			{ ...card, dateStart: "2026-09-11T00:59:00+01:00", hasTime: false },
-			null,
+		const raw = must(
+			toRawEvent(
+				{ ...card, dateStart: "2026-09-11T00:59:00+01:00", hasTime: false },
+				null,
+			),
 		);
-		expect(raw!.startAt).toBe(1789081200); // 2026-09-11 00:00 WEST
+		expect(raw.startAt).toBe(1789081200); // 2026-09-11 00:00 WEST
 	});
 });

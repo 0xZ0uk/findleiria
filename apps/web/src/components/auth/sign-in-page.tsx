@@ -122,7 +122,7 @@ function CheckYourEmail({
 					type="button"
 					onClick={() => void resend()}
 					disabled={state === "sending"}
-					className="focus-ring inline-flex h-11 shrink-0 items-center rounded-[4px] border border-muted-foreground/60 bg-card px-4 font-medium text-[15px] hover:border-primary/60 hover:text-primary disabled:opacity-50 motion-safe:transition-colors sm:h-10"
+					className="focus-ring inline-flex h-11 shrink-0 items-center rounded-[4px] border border-control bg-card px-4 font-medium text-[15px] hover:border-primary/60 hover:text-primary disabled:opacity-50 motion-safe:transition-colors sm:h-10"
 				>
 					{state === "sending" ? "Um momento…" : "Reenviar email"}
 				</button>
@@ -162,7 +162,7 @@ function SignedIn({ email }: { email: string }) {
 				<button
 					type="button"
 					onClick={() => void signOut()}
-					className="focus-ring inline-flex h-11 shrink-0 items-center rounded-[4px] border border-muted-foreground/60 bg-card px-4 font-medium text-[15px] hover:border-primary/60 hover:text-primary motion-safe:transition-colors sm:h-10"
+					className="focus-ring inline-flex h-11 shrink-0 items-center rounded-[4px] border border-control bg-card px-4 font-medium text-[15px] hover:border-primary/60 hover:text-primary motion-safe:transition-colors sm:h-10"
 				>
 					Terminar sessão
 				</button>
@@ -298,7 +298,7 @@ export function SignInPage() {
 								type="button"
 								onClick={() => void withGoogle()}
 								disabled={pending}
-								className="focus-ring inline-flex h-11 w-full items-center justify-center gap-2.5 rounded-[4px] border border-muted-foreground/60 bg-card px-4 font-medium text-[15px] text-foreground hover:border-primary/60 hover:text-primary disabled:opacity-50 motion-safe:transition-colors sm:h-10"
+								className="focus-ring inline-flex h-11 w-full items-center justify-center gap-2.5 rounded-[4px] border border-control bg-card px-4 font-medium text-[15px] text-foreground hover:border-primary/60 hover:text-primary disabled:opacity-50 motion-safe:transition-colors sm:h-10"
 							>
 								<GoogleMark />
 								Continuar com Google

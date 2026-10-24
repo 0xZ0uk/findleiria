@@ -318,7 +318,10 @@ for (const [index, name] of DISTRICT_MUNICIPALITIES.entries()) {
 		throw new Error(`${name}: Nominatim centre is outside its own geometry`);
 	}
 
-	const before = raw.reduce((sum, polygon) => sum + polygon[0]!.length, 0);
+	const before = raw.reduce(
+		(sum, polygon) => sum + (polygon[0]?.length ?? 0),
+		0,
+	);
 	const kept: MultiPolygon = [];
 	for (const polygon of raw) {
 		const rings: Ring[] = [];
@@ -329,7 +332,10 @@ for (const [index, name] of DISTRICT_MUNICIPALITIES.entries()) {
 		}
 		if (rings.length > 0) kept.push(rings);
 	}
-	const after = kept.reduce((sum, polygon) => sum + polygon[0]!.length, 0);
+	const after = kept.reduce(
+		(sum, polygon) => sum + (polygon[0]?.length ?? 0),
+		0,
+	);
 	if (kept.length === 0)
 		throw new Error(`${name}: simplification emptied the shape`);
 
@@ -358,5 +364,5 @@ await writeFile(OUT, `${JSON.stringify(payload)}\n`);
 
 console.log(report.join("\n"));
 console.log(
-	`\n${features.length}/${DISTRICT_MUNICIPALITIES.length} municípios → ${OUT.pathname.replace(process.cwd() + "/", "")}`,
+	`\n${features.length}/${DISTRICT_MUNICIPALITIES.length} municípios → ${OUT.pathname.replace(`${process.cwd()}/`, "")}`,
 );

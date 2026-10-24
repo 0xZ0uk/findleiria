@@ -162,15 +162,6 @@ describe("listEvents: window and undated", () => {
 });
 
 describe("listEvents: filters", () => {
-	test("category matches the whole category, including multi-category rows", async () => {
-		expect(slugs(await list({ category: "Cinema" }))).toEqual(["cinema"]);
-		expect(slugs(await list({ category: "Teatro" }))).toEqual([
-			"peca-18h",
-			"sem-sitio",
-		]);
-		expect(slugs(await list({ category: "Cine" }))).toEqual([]);
-	});
-
 	test("venueSlug keeps only that venue's events", async () => {
 		const rows = await list({ venueSlug: "marinha-grande" });
 		expect(slugs(rows)).toEqual(["cinema"]);
@@ -185,8 +176,8 @@ describe("listEvents: filters", () => {
 	test("filters combine", async () => {
 		const rows = await list({
 			city: "Leiria",
-			category: "Música",
 			dateFrom: NOW,
+			dateTo: NOW + 2 * DAY,
 		});
 		expect(slugs(rows)).toEqual(["jazz"]);
 	});

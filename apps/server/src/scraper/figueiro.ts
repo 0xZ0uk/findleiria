@@ -31,7 +31,7 @@ import type { RawEvent } from "./types";
  * DAY (the agenda publishes spans, e.g. "1 janeiro 2025 → 31 dezembro 2026");
  * an item with no `to` at all keeps a null end when it carries a clock time,
  * and closes at end of day when it is day-precision. Events whose end is past
- * are dropped (RETRO_TOLERANCE_S), never rolled forward.
+ * are dropped, never rolled forward (RETRO_TOLERANCE_S below).
  *
  * Scope: the agenda is the municipality's own, so `.djev_city` is the
  * concelho (Figueiró dos Vinhos ⇒ Distrito de Leiria) and the gate drops
@@ -47,7 +47,12 @@ import type { RawEvent } from "./types";
 
 export const SITE = "https://www.cm-figueirodosvinhos.pt";
 export const AGENDA_PATH = "/index.php/listar-agenda-rss";
-/** An event is "live" until one day after its local end. */
+/**
+ * Gates the "past" drop. NOT a no-op: a timed item with no `to` keeps a null
+ * end, so `effectivelyOver` is its START instant, while ingest keeps such a
+ * row until the end of its Lisbon day. One day of slack stops this gate from
+ * dropping an event that is still on tonight.
+ */
 export const RETRO_TOLERANCE_S = 86_400;
 /** The agenda names no venue: the concelho is the honest, vague fallback. */
 export const DEFAULT_VENUE = "Figueiró dos Vinhos";

@@ -1,12 +1,6 @@
-import {
-	Bookmark,
-	CalendarDays,
-	LogOut,
-	type LucideIcon,
-	User,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { signOut, useSession } from "@/utils/auth-client";
+import { Bookmark, CalendarDays, type LucideIcon, User } from "lucide-react";
+import { AccountDisclosure } from "@/components/auth/account-disclosure";
+import { useSession } from "@/utils/auth-client";
 import { savedHref } from "@/utils/route";
 
 /** The path we are on right now; safe for the prerender step, no window there. */
@@ -81,33 +75,12 @@ function Tab({
 
 /**
  * The Conta tab: a link to `/entrar` when signed out; when signed in it opens
- * a small sheet above the bar with the account and the way out. Symmetric to
- * the desktop AccountMenu — one ref, one outside-click listener, Escape.
+ * a small sheet above the bar with the account and the way out. Shares its
+ * behaviour with the desktop AccountMenu through `AccountDisclosure`.
  */
 function ContaTab({ active }: { active: boolean }) {
 	const { data: session } = useSession();
 	const user = session?.user ?? null;
-	const [open, setOpen] = useState(false);
-	const wrapper = useRef<HTMLDivElement>(null);
-
-	useEffect(() => {
-		if (!open) return;
-
-		const onPointerDown = (event: PointerEvent) => {
-			if (!wrapper.current?.contains(event.target as Node)) setOpen(false);
-		};
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") setOpen(false);
-		};
-
-		document.addEventListener("pointerdown", onPointerDown);
-		document.addEventListener("keydown", onKeyDown);
-		return () => {
-			document.removeEventListener("pointerdown", onPointerDown);
-			document.removeEventListener("keydown", onKeyDown);
-		};
-	}, [open]);
-
 	// Signed out, Conta is the way in.
 	if (!user) {
 		return (
@@ -128,52 +101,26 @@ function ContaTab({ active }: { active: boolean }) {
 		);
 	}
 
-	// The tab reads "Conta" either way; the sheet carries the name and email.
-	const called = open ? "text-primary" : "text-muted-foreground";
-
+	// The tab reads "Conta" either way; the sheet carries the email.
 	return (
-		<div ref={wrapper} className="relative">
-			<button
-				type="button"
-				onClick={() => setOpen((value) => !value)}
-				aria-expanded={open}
-				aria-haspopup="menu"
-				aria-label="A sua conta"
-				className={`focus-ring inline-flex min-h-[56px] w-full flex-col items-center justify-center gap-1 rounded-[4px] motion-safe:transition-colors ${called}`}
-			>
-				<User
-					aria-hidden="true"
-					strokeWidth={1.5}
-					className="size-5"
-					fill={open ? "currentColor" : "none"}
-				/>
-				<span className={`${MICRO_NAV} ${called}`}>Conta</span>
-			</button>
-
-			{open ? (
-				<div
-					role="menu"
-					className="absolute bottom-full left-1/2 z-30 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-[4px] border border-border bg-card p-4 shadow-lg sm:hidden"
-				>
-					<p className={`${MICRO_NAV} text-muted-foreground`}>
-						Sessão iniciada
-					</p>
-					<p className="mt-2 truncate text-[14px]">{user.email}</p>
-					<button
-						type="button"
-						role="menuitem"
-						onClick={() => {
-							setOpen(false);
-							void signOut();
-						}}
-						className="focus-ring mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-[4px] border border-muted-foreground/60 text-[14px] hover:border-primary/60 hover:text-primary motion-safe:transition-colors"
-					>
-						<LogOut aria-hidden="true" strokeWidth={1.5} className="size-4" />
-						Terminar sessão
-					</button>
-				</div>
-			) : null}
-		</div>
+		<AccountDisclosure
+			email={user.email}
+			triggerClassName="focus-ring inline-flex min-h-[56px] w-full flex-col items-center justify-center gap-1 rounded-[4px] motion-safe:transition-colors aria-expanded:text-primary text-muted-foreground"
+			panelClassName="absolute bottom-full left-1/2 z-30 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-[4px] border border-border bg-card p-4 shadow-lg sm:hidden"
+			captionClassName={`${MICRO_NAV} text-muted-foreground`}
+			signOutClassName="focus-ring mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-[4px] border border-control text-[14px] hover:border-primary/60 hover:text-primary motion-safe:transition-colors"
+			trigger={(open) => (
+				<>
+					<User
+						aria-hidden="true"
+						strokeWidth={1.5}
+						className="size-5"
+						fill={open ? "currentColor" : "none"}
+					/>
+					<span className={MICRO_NAV}>Conta</span>
+				</>
+			)}
+		/>
 	);
 }
 

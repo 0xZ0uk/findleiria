@@ -9,8 +9,8 @@ import { useSavedStore } from "@/components/saved/saved-context";
 import { SHELL_DESCRIPTION, useDocumentMeta } from "@/hooks/use-document-meta";
 import type { SavedListEvent } from "@/utils/api";
 import { api } from "@/utils/api";
-import { clock, dayMonth, hasClock, plural, weekday } from "@/utils/format";
-import { savedHref, signInHref } from "@/utils/route";
+import { clock, hasClock, plural } from "@/utils/format";
+import { eventHref, savedHref, signInHref } from "@/utils/route";
 
 /** Three placeholder lines, so the list does not jump when the read lands. */
 function SavedSkeleton() {
@@ -59,7 +59,7 @@ function SavedRow({ event }: { event: SavedListEvent }) {
 	return (
 		<EventRow
 			title={event.title}
-			detailHref={`/evento/${encodeURIComponent(event.slug)}`}
+			detailHref={eventHref(event.slug)}
 			href={event.url}
 			imageUrl={event.imageUrl}
 			seed={event.slug}
@@ -97,7 +97,7 @@ function MissingRow({
 				<p className="text-[15px] text-muted-foreground">
 					Evento já não disponível
 				</p>
-				<p className={`${MICRO} mt-1 truncate text-muted-foreground/70`}>
+				<p className={`${MICRO} mt-1 truncate text-muted-foreground/85`}>
 					{slug}
 				</p>
 			</div>
@@ -105,7 +105,7 @@ function MissingRow({
 				type="button"
 				onClick={onRemove}
 				disabled={pending}
-				className="focus-ring inline-flex h-11 shrink-0 items-center rounded-[4px] border border-muted-foreground/60 px-3 text-[13px] hover:border-primary/60 hover:text-primary disabled:opacity-50 motion-safe:transition-colors"
+				className="focus-ring inline-flex h-11 shrink-0 items-center rounded-[4px] border border-control px-3 text-[13px] hover:border-primary/60 hover:text-primary disabled:opacity-50 motion-safe:transition-colors"
 			>
 				Remover
 			</button>
@@ -142,7 +142,7 @@ function NothingSaved() {
 			</p>
 			<a
 				href="/"
-				className="focus-ring mt-5 inline-flex h-11 items-center rounded-[4px] border border-muted-foreground/60 px-4 text-[14px] hover:border-primary/60 hover:text-primary motion-safe:transition-colors"
+				className="focus-ring mt-5 inline-flex h-11 items-center rounded-[4px] border border-control px-4 text-[14px] hover:border-primary/60 hover:text-primary motion-safe:transition-colors"
 			>
 				Ver a agenda
 			</a>
@@ -208,6 +208,7 @@ export function SavedPage() {
 					<SavedSkeleton />
 				) : events.isError ? (
 					<AgendaError
+						what="os eventos guardados"
 						message={
 							events.error instanceof Error
 								? events.error.message

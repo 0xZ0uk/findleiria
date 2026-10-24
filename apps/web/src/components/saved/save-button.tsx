@@ -41,12 +41,17 @@ export function SaveButton({
 		? layout === "detail"
 			? "border border-primary bg-primary text-primary-foreground hover:bg-primary/90"
 			: "border border-primary/60 text-primary"
-		: "border border-muted-foreground/60 bg-card text-foreground hover:border-primary/60 hover:text-primary";
+		: "border border-control bg-card text-foreground hover:border-primary/60 hover:text-primary";
 
 	// Signed out, the control is a route to the session page, keeping wherever
-	// the reader was so they land back here after signing in.
+	// the reader was so they land back here after signing in. The query string
+	// rides along, or a filtered agenda would come back unfiltered; `signInHref`
+	// still only accepts a same-origin path.
 	if (!saved.signedIn) {
-		const path = typeof window === "undefined" ? "/" : window.location.pathname;
+		const path =
+			typeof window === "undefined"
+				? "/"
+				: `${window.location.pathname}${window.location.search}`;
 		return (
 			<a
 				href={signInHref(path)}
