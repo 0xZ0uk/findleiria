@@ -3,8 +3,9 @@ import { DateTime } from "luxon";
 import { isLeiriaDistrict } from "./district";
 import { toEpochInLisbon } from "./fingerprint";
 import { defaultFetchText } from "./http";
+import { defaultSleep } from "./lib/timing";
 import { decodeEntities } from "./normalize";
-import { loadState, saveState } from "./state";
+import { disambiguateSameDaySessions } from "./session-slug";
 import type { RawEvent } from "./types";
 
 /**
@@ -35,12 +36,16 @@ import type { RawEvent } from "./types";
  * via include= (per_page=100) and the whole run is capped by MAX_DETAIL_*
  * constants so a pathological month cannot fan out into thousands of calls.
  *
- * State ("regiaoleiria"): records the horizon months already discovered. The
- * current month is always re-fetched (its roster churns daily) and every post
- * id seen this run gets its detail re-fetched, so steady-state runs still emit
- * fresh events rather than nothing; the (post_id ↔ date) pairing is what keeps
- * it to exactly one RawEvent per (post_id, date). The fingerprint pipeline
- * makes re-ingestion a no-op.
+ * No state: EVERY horizon month is re-fetched on every run (7 cheap JSON
+ * calls) because later months' rosters change too — a watermark would freeze
+ * them forever. (Older runs persisted a `monthsFetched` watermark in
+ * state/regiaoleiria.json; that file is simply no longer read.) Every post id
+ * seen this run gets its detail re-fetched; the (post_id ↔ date) pairing is
+ * what keeps it to exactly one RawEvent per (post_id, date). The fingerprint
+ * pipeline makes re-ingestion a no-op.
+ *
+ * Same-day sessions of one post get distinct raw slugs (earliest keeps
+ * `rl-<slug>`, later ones `-HHmm`) — see session-slug.ts.
  */
 export const BY_MONTH_BASE =
 	"https://www.regiaodeleiria.pt/wp-json/user/events/get-by-month";
@@ -51,16 +56,6 @@ export const HORIZON_MONTHS = 6;
 export const PER_PAGE = 100;
 export const MAX_DETAIL_REQUESTS = 30;
 export const MAX_PLACE_REQUESTS = 5;
-
-export interface RegiaoState {
-	/** Horizon months ("YYYY-M") whose discovery rows we have already
-	 * fetched. Steady-state runs always re-fetch the CURRENT month (its
-	 * roster changes daily) and fetch any horizon month not yet watermarked,
-	 * so a settled run costs ~1 discovery call + its (bounded) detail. */
-	monthsFetched: string[];
-}
-
-export const DEFAULT_STATE: RegiaoState = { monthsFetched: [] };
 
 export interface ScrapeResult {
 	events: RawEvent[];
@@ -76,13 +71,8 @@ export interface ScrapeResult {
 export interface ScrapeDeps {
 	fetchText: (url: string) => Promise<string>;
 	sleep: (ms: number) => Promise<void>;
-	loadState: () => RegiaoState;
-	saveState: (s: RegiaoState) => void;
 	now: number;
 }
-
-const defaultSleep = (ms: number) =>
-	new Promise<void>((r) => setTimeout(r, ms));
 
 /** Raw `{ post_id, date }` row from the monthly endpoint. */
 export interface MonthRow {
@@ -231,8 +221,6 @@ export async function scrape(
 	deps: ScrapeDeps = {
 		fetchText: defaultFetchText,
 		sleep: defaultSleep,
-		loadState: () => loadState("regiaoleiria", DEFAULT_STATE),
-		saveState: (s) => saveState("regiaoleiria", s),
 		now: Math.floor(Date.now() / 1000),
 	},
 	isInScope: (city: string | null | undefined) => boolean = (city) =>
@@ -253,54 +241,40 @@ export async function scrape(
 		return deps.fetchText(url);
 	};
 
-	// 1. Discovery: current + next month ALWAYS (near-term roster churns
-	// daily); further horizon months fetched only when not yet watermarked.
-	const state = deps.loadState();
-	const watermarked = new Set(state.monthsFetched);
-	const monthsToFetch: string[] = [];
+	// 1. Discovery: the current month plus the whole horizon, EVERY run. No
+	// watermark: later months' rosters change too (7 cheap JSON calls). A month
+	// that fails is counted and skipped so the others still land.
+	const rowsByPost = new Map<string, MonthRow[]>();
 	for (let off = 0; off <= HORIZON_MONTHS; off++) {
 		const dt = base.plus({ months: off });
-		const key = `${dt.year}-${dt.month}`;
-		// off 0 (current) and off 1 (next) are always refreshed; past them we
-		// trust the watermark so a settled run costs ~2 discovery calls.
-		if (off <= 1 || !watermarked.has(key)) {
-			monthsToFetch.push(key);
-		}
-	}
-
-	const rowsByMonth: Array<{ key: string; rows: MonthRow[] }> = [];
-	try {
-		for (const key of monthsToFetch) {
-			const [y, m] = key.split("-");
-			const url = `${BY_MONTH_BASE}?month=${Number(m)}&year=${Number(y)}`;
+		const url = `${BY_MONTH_BASE}?month=${dt.month}&year=${dt.year}`;
+		try {
 			const text = await fetchPage(url);
 			pagesFetched++;
-			rowsByMonth.push({ key, rows: parseMonthRows(text) });
+			for (const r of parseMonthRows(text)) {
+				const arr = rowsByPost.get(r.postId) ?? [];
+				arr.push(r);
+				rowsByPost.set(r.postId, arr);
+			}
+		} catch (err) {
+			failures++;
+			firstError ??= `discovery ${dt.year}-${dt.month}: ${err instanceof Error ? err.message : String(err)}`;
 		}
-	} catch (err) {
+	}
+	const discovered = rowsByPost.size;
+	if (discovered === 0) {
+		// The whole horizon yielding nothing is broken discovery, not a quiet day.
+		failures++;
+		firstError ??= "discovery parsed to zero events across the whole horizon";
 		return {
 			events: [],
 			failures,
-			firstError: err instanceof Error ? err.message : String(err),
+			firstError,
 			pagesFetched,
 			discovered: 0,
 			droppedOutOfDistrict: 0,
 		};
 	}
-
-	// Union of post ids across the fetched months, preserving rows.
-	const rowsByPost = new Map<string, MonthRow[]>();
-	for (const { key } of rowsByMonth) {
-		watermarked.add(key);
-	}
-	for (const { rows } of rowsByMonth) {
-		for (const r of rows) {
-			const arr = rowsByPost.get(r.postId) ?? [];
-			arr.push(r);
-			rowsByPost.set(r.postId, arr);
-		}
-	}
-	const discovered = rowsByPost.size;
 
 	// 2. Fetch cartaz detail for every post id seen THIS run (bounded), so
 	// steady-state runs still emit fresh events rather than nothing.
@@ -407,13 +381,8 @@ export async function scrape(
 		}
 	}
 
-	// 5. Persist the month watermark: these discovery months are now known, so
-	//    a steady-state run skips the horizon months still in the past. The
-	//    CURRENT month is always refreshed regardless (see step 1).
-	deps.saveState({ monthsFetched: [...watermarked] });
-
 	return {
-		events,
+		events: disambiguateSameDaySessions(events),
 		failures,
 		firstError,
 		pagesFetched,

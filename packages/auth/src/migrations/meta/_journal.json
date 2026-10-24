@@ -15,6 +15,13 @@
       "when": 1789213442598,
       "tag": "0001_tough_snowbird",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792842368333,
+      "tag": "0002_rate_limit",
+      "breakpoints": true
     }
   ]
 }

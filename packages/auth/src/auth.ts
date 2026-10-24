@@ -42,6 +42,12 @@ export function verificationMessage(to: string, url: string) {
 export function createAuth(
 	database: AuthDb = authDb,
 	mailer: Mailer = sendMail,
+	{
+		rateLimit: rateLimitEnabled = authEnv.NODE_ENV === "production",
+	}: {
+		/** Tests turn it on for one instance; everywhere else it is production-only. */
+		rateLimit?: boolean;
+	} = {},
 ) {
 	return betterAuth({
 		appName: "FindLeiria",
@@ -98,6 +104,14 @@ export function createAuth(
 		databaseHooks: {
 			account: { create: { before: googleProvesOwnership } },
 		},
+		// Counters in the auth database, not in memory: each serverless instance
+		// would otherwise keep its own count, reset on every cold start, so the
+		// limit would be close to meaningless. better-auth's special rules stay
+		// as shipped (sign-in/sign-up/change-*: 3 per 10s per IP; verification
+		// and reset mail: 3 per 60s; everything else 100 per 10s). Off outside
+		// production, like better-auth's own default: the suite signs in far
+		// faster than 3 per 10s.
+		rateLimit: { enabled: rateLimitEnabled, storage: "database" },
 		advanced: { cookiePrefix: "findleiria" },
 		telemetry: { enabled: false },
 	});

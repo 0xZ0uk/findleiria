@@ -6,7 +6,14 @@ import {
 } from "@events-tracker/api/period";
 import { AGENDA_WINDOW_DAYS } from "@events-tracker/api/snapshot-shape";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	useCallback,
+	useDeferredValue,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { api, type PublicEvent, type UndatedEvent } from "@/utils/api";
 import { concelhoOf } from "@/utils/concelho";
 import {
@@ -54,6 +61,10 @@ export type AgendaRow = {
 	startAt: number;
 	endAt: number | null;
 	sessionStarts: number[];
+	/** Lisbon `YYYY-MM-DD` of `startAt`, computed once when the row is built. */
+	dayKey: string;
+	/** Same for `endAt`; null when the event has no end. */
+	endDayKey: string | null;
 	/** Pre-normalised `title venue city categories`, so typing is a substring test. */
 	haystack: string;
 };
@@ -188,6 +199,8 @@ function toRow(event: PublicEvent): AgendaRow {
 		startAt: event.startAt,
 		endAt: event.endAt,
 		sessionStarts: event.sessionStarts ?? [],
+		dayKey: dayKey(event.startAt),
+		endDayKey: event.endAt === null ? null : dayKey(event.endAt),
 		haystack: searchable(
 			event.title,
 			event.venueName,
@@ -225,7 +238,7 @@ function matches(row: AgendaRow, filters: Filters, needle: string): boolean {
 		return false;
 	if (filters.venue && row.venueSlug !== filters.venue) return false;
 	// Range bounds are day keys, so an event on the `to` day is included whole.
-	const key = dayKey(row.startAt);
+	const key = row.dayKey;
 	if (filters.from && key < filters.from) return false;
 	if (filters.to && key > filters.to) return false;
 	return true;
@@ -238,7 +251,7 @@ function groupByDay(
 ): DayGroup[] {
 	const days = new Map<string, AgendaRow[]>();
 	for (const row of rows) {
-		const key = dayKey(row.startAt);
+		const key = row.dayKey;
 		const existing = days.get(key);
 		if (existing) existing.push(row);
 		else days.set(key, [row]);
@@ -402,9 +415,12 @@ export function useAgenda() {
 				: [],
 		[snapshot, range],
 	);
+	// The input reads `filters.q` directly so typing never lags; the list work
+	// follows the deferred copy and yields to keystrokes.
+	const deferredQ = useDeferredValue(filters.q);
 	const needle = useMemo(
-		() => normalizeEventTitle(filters.q.trim()),
-		[filters.q],
+		() => normalizeEventTitle(deferredQ.trim()),
+		[deferredQ],
 	);
 
 	const hasFacet = Boolean(
@@ -548,7 +564,7 @@ export function useAgenda() {
 		dia,
 		rangeBounds: {
 			min: range.todayKey,
-			max: lastRow ? dayKey(lastRow.startAt) : range.todayKey,
+			max: lastRow ? lastRow.dayKey : range.todayKey,
 		},
 		announcements,
 		lastRunLabel: snapshot?.stats.lastRunAt

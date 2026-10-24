@@ -36,3 +36,31 @@ describe("impossible dates (S2)", () => {
 		expect(result.pagesFetched).toBeGreaterThanOrEqual(2);
 	});
 });
+
+describe("S7 broken listing is a failure, not a quiet day", () => {
+	const run = (html: string) =>
+		scrape({ fetchText: async () => html, sleep: async () => {} });
+
+	test("missing __SERVER_DATA__ on page 1 is counted", async () => {
+		const result = await run("<html><body>Access denied</body></html>");
+		expect(result.events).toEqual([]);
+		expect(result.failures).toBe(1);
+		expect(result.firstError).toContain("__SERVER_DATA__ not found");
+	});
+
+	test("page 1 with data but zero events is counted", async () => {
+		const result = await run(page([]));
+		expect(result.failures).toBe(1);
+		expect(result.firstError).toContain("no events");
+	});
+
+	test("an empty LATER page is just the end of pagination", async () => {
+		const result = await scrape({
+			fetchText: async (url) =>
+				url === LISTING_URL ? page([ev("1", "2026-10-01")]) : page([]),
+			sleep: async () => {},
+		});
+		expect(result.failures).toBe(0);
+		expect(result.events.map((e) => e.slug)).toEqual(["eb-1"]);
+	});
+});

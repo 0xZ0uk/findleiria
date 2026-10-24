@@ -1,5 +1,6 @@
 import { lazy, Suspense, useMemo } from "react";
 import { MICRO } from "@/components/agenda/layout";
+import { ErrorBoundary } from "@/components/error-boundary";
 import type { Agenda } from "@/hooks/use-agenda";
 import {
 	districtRoster,
@@ -95,21 +96,23 @@ export function MapView({ agenda }: { agenda: Agenda }) {
 
 			<div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
 				<div className="min-w-0">
-					<Suspense
-						fallback={
-							<div className="h-[58svh] min-h-[320px] w-full animate-pulse rounded-[4px] border border-border bg-card sm:h-[520px]" />
-						}
-					>
-						<ConcelhoMap
-							counts={counts}
-							max={busiest}
-							selected={selected}
-							onSelect={toggle}
-							pins={pins}
-							selectedVenue={selectedVenue}
-							onSelectVenue={toggleVenue}
-						/>
-					</Suspense>
+					<ErrorBoundary title="O mapa não carregou.">
+						<Suspense
+							fallback={
+								<div className="h-[58svh] min-h-[320px] w-full animate-pulse rounded-[4px] border border-border bg-card sm:h-[520px]" />
+							}
+						>
+							<ConcelhoMap
+								counts={counts}
+								max={busiest}
+								selected={selected}
+								onSelect={toggle}
+								pins={pins}
+								selectedVenue={selectedVenue}
+								onSelectVenue={toggleVenue}
+							/>
+						</Suspense>
+					</ErrorBoundary>
 
 					<div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
 						<div className="flex flex-wrap items-center gap-x-4 gap-y-2">

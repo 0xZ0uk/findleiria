@@ -2,41 +2,20 @@ import * as cheerio from "cheerio";
 
 import { toEpochInLisbon } from "./fingerprint";
 import { defaultFetchText } from "./http";
+import { createFetchGate } from "./lib/fetch-gate";
+import { monthFromName } from "./lib/pt-dates";
+import { defaultSleep, randomDelay } from "./lib/timing";
+import { disambiguateSameDaySessions } from "./session-slug";
 import type { RawEvent } from "./types";
 
 /**
- * BOL (www.bol.pt/musica_festivais) parse + Leiria venue pre-filter layer.
+ * BOL (www.bol.pt/musica_festivais) parse + scrape layer.
  *
- * Pure functions only: this module is NOT wired into the source registry yet.
- * The fixtures in __fixtures__/bol*.html drive all tests offline.
+ * Registered in the source registry (index.ts). Listings are fetched with the
+ * district (`10`) segment already applied, so every card is in scope; the
+ * authoritative district check happens at ingest via district.ts. The
+ * fixtures in __fixtures__/bol*.html drive all tests offline.
  */
-
-/** Known Leiria-relevant venue substrings (venue slugs are underscore-form). */
-export const LEIRIA_VENUE_KEYWORDS = [
-	"leiria",
-	"miguel_franco",
-	"lucio",
-	"santana",
-	"sant_ana",
-	"castelo_de_leiria",
-	"mimo",
-] as const;
-
-/** BTW candidates are validated against these real non-Leiria slugs. */
-
-/**
- * Arrays of words that, when title-cased, would collide in naive runs. Kept
- * explicit so title-case output stays deterministic for slug-derived names.
- */
-
-/**
- * True when a venue slug points at a Leiria-area venue. Match is a plain
- * substring scan over the underscore-form slug. Everything else is rejected.
- */
-export function isLeiriaVenue(venueSlug: string): boolean {
-	const slug = venueSlug.replace(/^\/+|\/+$/g, "");
-	return LEIRIA_VENUE_KEYWORDS.some((k) => slug.includes(k));
-}
 
 /** A listing-page BOL event link (id, canonical url, and both embedded slugs). */
 export interface ListingLink {
@@ -99,21 +78,6 @@ export function parseListingLinks(html: string): ListingLink[] {
 	return links;
 }
 
-const PT_MONTHS: Record<string, number> = {
-	jan: 1,
-	fev: 2,
-	mar: 3,
-	abr: 4,
-	mai: 5,
-	jun: 6,
-	jul: 7,
-	ago: 8,
-	set: 9,
-	out: 10,
-	nov: 11,
-	dez: 12,
-};
-
 export interface DetailSession {
 	startAt: number;
 	hasTime: boolean;
@@ -161,8 +125,7 @@ export function parseDetailSessions(
 	scope.find(".sessao").each((_, el) => {
 		const year = Number.parseInt($(el).find(".ano").first().text(), 10);
 		const monthText = $(el).find(".mes").first().text();
-		const month =
-			PT_MONTHS[monthText.match(/[a-z]{3}/i)?.[0]?.toLowerCase() ?? ""];
+		const month = monthFromName(monthText.match(/[a-z]{3}/i)?.[0] ?? "");
 		const day = Number.parseInt($(el).find(".dia").first().text(), 10);
 		if (
 			Number.isFinite(year) &&
@@ -232,28 +195,34 @@ export function slugToTitle(slug: string): string {
  * Merge a BOL listing card with its detail html into RawEvents — one per
  * session. Title/venue strings are derived from the embedded slugs. BOL
  * listings are already district-filtered (the `10` district segment in the
- * search URL), so the venue pre-filter (city-scope era) is no longer a
- * gate: any venue in the district result set passes, city stays null and
- * is resolved at ingest from the venue name.
+ * search URL), so there is no venue gate here: any venue in the district
+ * result set passes, city stays null and is resolved at ingest from the
+ * venue name.
+ *
+ * Same-day sessions of one item get distinct raw slugs (the earliest keeps the
+ * bare event slug, later ones a `-HHmm` suffix) so ingest does not collapse an
+ * 18h30 and a 21h30 show into one event. See session-slug.ts.
  */
 export function buildRawEvents(
 	card: ListingLink,
 	detailHtml: string,
 ): RawEvent[] {
 	const venueName = slugToTitle(card.venueSlug);
-	return parseDetailSessions(detailHtml, card.url).map((s) => ({
-		title: slugToTitle(card.eventSlug),
-		slug: card.eventSlug,
-		description: null,
-		startAt: s.startAt,
-		endAt: null,
-		dateText: null,
-		venueName,
-		city: null, // resolved at ingest via venue name (district scope)
-		categories: [],
-		imageUrl: null,
-		url: card.url,
-	}));
+	return disambiguateSameDaySessions(
+		parseDetailSessions(detailHtml, card.url).map((s) => ({
+			title: slugToTitle(card.eventSlug),
+			slug: card.eventSlug,
+			description: null,
+			startAt: s.startAt,
+			endAt: null,
+			dateText: null,
+			venueName,
+			city: null, // resolved at ingest via venue name (district scope)
+			categories: [],
+			imageUrl: null,
+			url: card.url,
+		})),
+	);
 }
 
 const BOL_SITE = "https://www.bol.pt";
@@ -276,8 +245,8 @@ export interface ScrapeResult {
 	events: RawEvent[];
 	failures: number;
 	firstError: string | null;
-	/** Diagnostic: venue slugs matched by the Leiria pre-filter. */
-	matchedVenueSlugs: string[];
+	/** Diagnostic: distinct venue slugs seen in the district listings. */
+	venueSlugs: string[];
 }
 
 interface ScrapeDeps {
@@ -288,14 +257,11 @@ interface ScrapeDeps {
 const MAX_REQUESTS = 400;
 const DETAIL_CONCURRENCY = 4;
 
-const defaultSleep = (ms: number) =>
-	new Promise<void>((r) => setTimeout(r, ms));
-const randomDelay = () => 300 + Math.floor(Math.random() * 200);
-
 /**
- * Scrape BOL for Leiria-area events: fetch the 4 category listings, pre-filter
- * event links by Leiria venue slug, then fetch + parse each matched detail
- * page. Per-card failures are counted, never fatal.
+ * Scrape BOL for district events: fetch the district-filtered category
+ * listings, then fetch + parse every listed event's detail page. Listing and
+ * per-card failures are counted, never fatal; listings that parse to zero
+ * links are a failure, not a quiet day.
  */
 export async function scrape(
 	deps: ScrapeDeps = {
@@ -303,22 +269,16 @@ export async function scrape(
 		sleep: defaultSleep,
 	},
 ): Promise<ScrapeResult> {
-	let requests = 0;
-	let chain: Promise<unknown> = Promise.resolve();
-	const fetchPage = (url: string): Promise<string> => {
-		const next = chain.then(async () => {
-			if (requests >= MAX_REQUESTS) {
-				throw new Error(`request cap ${MAX_REQUESTS} reached`);
-			}
-			requests++;
-			await deps.sleep(randomDelay());
-			return deps.fetchText(url);
-		});
-		chain = next.catch(() => {});
-		return next;
-	};
+	const { fetchPage } = createFetchGate({
+		fetchText: deps.fetchText,
+		sleep: deps.sleep,
+		maxRequests: MAX_REQUESTS,
+		delay: () => randomDelay(300, 200),
+	});
 
 	const byId = new Map<number, ListingLink>();
+	let failures = 0;
+	let firstError: string | null = null;
 	for (const listing of LISTING_URLS) {
 		try {
 			const html = await fetchPage(listing);
@@ -334,16 +294,19 @@ export async function scrape(
 				}
 			}
 		} catch (err) {
-			console.error(`BOL listing ${listing} failed: ${err}`);
+			failures++;
+			firstError ??= `BOL listing ${listing} failed: ${err instanceof Error ? err.message : String(err)}`;
 		}
 	}
+	if (byId.size === 0) {
+		failures++;
+		firstError ??= "BOL listings parsed to zero event links";
+	}
 
-	const cards = [...byId.values()].filter((c) => isLeiriaVenue(c.venueSlug));
-	const matchedVenueSlugs = [...new Set(cards.map((c) => c.venueSlug))];
+	const cards = [...byId.values()];
+	const venueSlugs = [...new Set(cards.map((c) => c.venueSlug))];
 
 	const events: RawEvent[] = [];
-	let failures = 0;
-	let firstError: string | null = null;
 	let cursor = 0;
 	const worker = async () => {
 		while (cursor < cards.length) {
@@ -365,5 +328,5 @@ export async function scrape(
 	};
 	await Promise.all(Array.from({ length: DETAIL_CONCURRENCY }, worker));
 
-	return { events, failures, firstError, matchedVenueSlugs };
+	return { events, failures, firstError, venueSlugs };
 }

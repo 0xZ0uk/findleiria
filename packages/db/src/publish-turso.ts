@@ -17,6 +17,11 @@
  *
  *   bun run db:publish                    # from packages/db, uses the repo .env
  *   DATABASE_URL=… TURSO_DATABASE_URL=… TURSO_AUTH_TOKEN=… bun run db:publish
+ *
+ * The daily job (`pnpm --filter server daily`) runs this after the scrape.
+ * Schema: every local column of the mirrored tables is published, so Turso
+ * must be migrated as far as local.db (`db:migrate` against Turso, see the
+ * README); a missing column fails the publish before anything is written.
  */
 import { Database } from "bun:sqlite";
 
@@ -26,6 +31,18 @@ import { createClient } from "@libsql/client";
 const TABLES = ["venues", "events", "event_sources", "scrape_runs"] as const;
 
 type Table = (typeof TABLES)[number];
+
+/**
+ * Local tables that are scraper bookkeeping, never read by the site, and so
+ * never published. `event_aliases` maps folded source items to their keeper
+ * event (C6); Turso does not need it and may not even have the table. Every
+ * other local table must be in TABLES: a new table fails the publish until it
+ * is classified here or there, instead of silently not being mirrored.
+ */
+const LOCAL_ONLY_TABLES = ["event_aliases"] as const;
+
+/** SQLite / drizzle internals, never mirrored. */
+const INTERNAL_TABLE = /^(sqlite_|__drizzle|_litestream|libsql_)/;
 
 const databaseUrl = process.env.DATABASE_URL ?? "";
 const localPath = databaseUrl.replace(/^file:/, "");
@@ -47,6 +64,22 @@ if (!tursoUrl || !tursoToken) {
 }
 
 const local = new Database(localPath, { readonly: true });
+
+const classified: readonly string[] = [...TABLES, ...LOCAL_ONLY_TABLES];
+const unclassified = local
+	.query<{ name: string }, []>(
+		"SELECT name FROM sqlite_master WHERE type = 'table'",
+	)
+	.all()
+	.map((t) => t.name)
+	.filter((name) => !INTERNAL_TABLE.test(name) && !classified.includes(name));
+if (unclassified.length > 0) {
+	console.error(
+		`Local tables not classified for publishing: ${unclassified.join(", ")} — add them to TABLES or LOCAL_ONLY_TABLES in publish-turso.ts.`,
+	);
+	process.exit(1);
+}
+
 const turso = createClient({ url: tursoUrl, authToken: tursoToken });
 
 const statements: { sql: string; args: (string | number | null)[] }[] = [];
@@ -68,7 +101,13 @@ for (const table of TABLES) {
 	}
 	const missing = columns.filter((c) => !remoteColumns.includes(c));
 	if (missing.length > 0) {
-		console.error(`Turso ${table} is missing columns: ${missing.join(", ")}`);
+		// The local DB was migrated past Turso's schema. Every column is
+		// mirrored (the site's build selects the full drizzle schema, so Turso
+		// must have them all): apply the same committed migrations to Turso
+		// once, with the read/write token.
+		console.error(
+			`Turso ${table} is missing columns: ${missing.join(", ")} — the local DB is migrated past Turso. Migrate Turso once, from the repo root:\n  DATABASE_URL='<TURSO_DATABASE_URL>' TURSO_AUTH_TOKEN='<TURSO_RW_TOKEN>' pnpm --filter @events-tracker/db db:migrate`,
+		);
 		process.exit(1);
 	}
 

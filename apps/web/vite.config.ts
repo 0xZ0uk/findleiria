@@ -3,7 +3,8 @@ import { varlockVitePlugin } from "@varlock/vite-integration";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// One page, no routes: no router plugin, no generated route tree.
+// No router: the SPA picks its page from the pathname (src/utils/route.ts), so
+// there is no router plugin and no generated route tree.
 export default defineConfig({
 	server: {
 		port: 3300,

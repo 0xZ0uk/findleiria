@@ -31,12 +31,11 @@ const localidadeText = readFileSync(
 const NOW = Math.floor(Date.UTC(2026, 8, 11, 12, 0, 0) / 1000);
 
 import {
-	DEFAULT_STATE,
+	HORIZON_MONTHS,
 	parseCartaz,
 	parseLocalidade,
 	parseMonthRows,
 	parseWallClock,
-	type RegiaoState,
 	scrape,
 	slugFor,
 	toRawEvent,
@@ -70,19 +69,10 @@ function fixtureFetch(url: string): Promise<string> {
 	return Promise.resolve("[]");
 }
 
-function makeDeps(overrides: Partial<RegiaoState> = {}) {
-	// Spread DEFAULT_STATE, not a hand-written literal: the previous literal
-	// named a `seenPostIds` field that RegiaoState does not have, so every test
-	// ran with `monthsFetched === undefined` and the month-watermark branch
-	// (scrape step 1) was never exercised.
-	let state: RegiaoState = { ...DEFAULT_STATE, ...overrides };
+function makeDeps(fetchText: (url: string) => Promise<string> = fixtureFetch) {
 	return {
-		fetchText: fixtureFetch,
+		fetchText,
 		sleep: () => Promise.resolve(),
-		loadState: () => state,
-		saveState: (s: RegiaoState) => {
-			state = s;
-		},
 		now: NOW,
 	};
 }
@@ -194,5 +184,121 @@ describe("scrape — district gate is the point", () => {
 				expect(e.startAt).toBeGreaterThanOrEqual(NOW);
 			}
 		}
+	});
+});
+
+describe("S8 every horizon month is fetched every run", () => {
+	test("all 7 monthly discovery URLs are requested; no state is read", async () => {
+		const monthUrls: string[] = [];
+		const res = await scrape(
+			makeDeps((url) => {
+				if (url.includes("/user/events/get-by-month")) monthUrls.push(url);
+				return fixtureFetch(url);
+			}),
+			undefined as never,
+		);
+		expect(monthUrls).toHaveLength(HORIZON_MONTHS + 1);
+		const months = monthUrls.map((u) =>
+			/month=(\d+)&year=(\d+)/.exec(u)?.slice(1),
+		);
+		expect(months).toEqual([
+			["9", "2026"],
+			["10", "2026"],
+			["11", "2026"],
+			["12", "2026"],
+			["1", "2027"],
+			["2", "2027"],
+			["3", "2027"],
+		]);
+		expect(res.events.length).toBeGreaterThan(0);
+	});
+
+	test("a failing month is counted, the others still land", async () => {
+		const res = await scrape(
+			makeDeps((url) =>
+				url.includes("month=11&year=2026")
+					? Promise.reject(new Error("HTTP 500"))
+					: fixtureFetch(url),
+			),
+			undefined as never,
+		);
+		expect(res.failures).toBe(1);
+		expect(res.firstError).toContain("2026-11");
+		expect(res.events.length).toBeGreaterThan(0);
+	});
+});
+
+describe("S7 empty discovery is a failure", () => {
+	test("every month empty -> counted failure with descriptive error", async () => {
+		const res = await scrape(
+			makeDeps(() => Promise.resolve("[]")),
+			undefined as never,
+		);
+		expect(res.events).toHaveLength(0);
+		expect(res.failures).toBe(1);
+		expect(res.firstError).toContain("zero events");
+	});
+
+	test("every month failing counts each failure (not failures: 0)", async () => {
+		const res = await scrape(
+			makeDeps(() => Promise.reject(new Error("HTTP 503"))),
+			undefined as never,
+		);
+		expect(res.failures).toBeGreaterThan(HORIZON_MONTHS);
+		expect(res.firstError).toContain("HTTP 503");
+	});
+
+	test("non-JSON discovery body is a failure", async () => {
+		const res = await scrape(
+			makeDeps(() => Promise.resolve("<html>blocked</html>")),
+			undefined as never,
+		);
+		expect(res.failures).toBeGreaterThan(0);
+		expect(res.events).toHaveLength(0);
+	});
+});
+
+describe("S5 same-day sessions of one post get distinct slugs", () => {
+	test("earliest keeps rl-<slug>, the later session is suffixed", async () => {
+		const fetchText = (url: string) => {
+			if (url.includes("get-by-month")) {
+				return Promise.resolve(
+					url.includes("month=9&")
+						? JSON.stringify([
+								{ post_id: "1", date: "2026-09-20 21:30:00" },
+								{ post_id: "1", date: "2026-09-20 18:30:00" },
+								{ post_id: "1", date: "2026-09-21 21:30:00" },
+							])
+						: "[]",
+				);
+			}
+			if (url.includes("/cartaz")) {
+				return Promise.resolve(
+					JSON.stringify([
+						{
+							id: 1,
+							slug: "peca",
+							link: "https://l/peca",
+							title: { rendered: "Peca" },
+							localidade: [5],
+							meta: { tipo: ["festa"] },
+						},
+					]),
+				);
+			}
+			return Promise.resolve(JSON.stringify([{ id: 5, name: "Leiria" }]));
+		};
+		const res = await scrape(makeDeps(fetchText), undefined as never);
+		const bySlug = new Map(
+			res.events.map((e) => [`${e.slug}@${e.startAt}`, e]),
+		);
+		const slugs = res.events.map((e) => e.slug).sort();
+		expect(slugs).toEqual(["rl-peca", "rl-peca", "rl-peca-2130"]);
+		// 18:30 is the earliest of the 20th and keeps the bare slug.
+		const first = res.events.find((e) => e.slug === "rl-peca-2130");
+		expect(first?.startAt).toBe(
+			Math.floor(Date.UTC(2026, 8, 20, 20, 30) / 1000),
+		);
+		expect(bySlug.size).toBe(3);
 	});
 });

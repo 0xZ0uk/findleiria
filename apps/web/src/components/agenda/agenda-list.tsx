@@ -1,6 +1,6 @@
 import { SaveButton } from "@/components/saved/save-button";
 import type { Agenda, AgendaRow } from "@/hooks/use-agenda";
-import { clock, dayKey, hasClock, plural, shortDay } from "@/utils/format";
+import { clock, hasClock, plural, shortDay } from "@/utils/format";
 import { eventHref } from "@/utils/route";
 import { EventRow } from "./event-row";
 import { GUTTER } from "./layout";
@@ -24,7 +24,11 @@ function chipsFor(event: AgendaRow, activeCategory: string): string[] {
 			]
 		: event.categories;
 	const chips = ordered.slice(0, 2);
-	if (event.endAt !== null && dayKey(event.endAt) !== dayKey(event.startAt))
+	if (
+		event.endAt !== null &&
+		event.endDayKey !== null &&
+		event.endDayKey !== event.dayKey
+	)
 		chips.unshift(`até ${shortDay(event.endAt)}`);
 	return chips;
 }

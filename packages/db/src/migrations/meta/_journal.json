@@ -22,6 +22,20 @@
       "when": 1789219257804,
       "tag": "0002_fixed_sally_floyd",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1792842187048,
+      "tag": "0003_event_aliases_last_seen",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792843708659,
+      "tag": "0004_scrape_run_outcome",
+      "breakpoints": true
     }
   ]
 }

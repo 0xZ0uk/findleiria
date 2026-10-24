@@ -1,12 +1,15 @@
+/** Built once: constructing an `Intl.DateTimeFormat` costs far more than `format`. */
+const LISBON_DAY = new Intl.DateTimeFormat("en-CA", {
+	timeZone: "Europe/Lisbon",
+});
+
 /**
  * Lisbon-local day of an epoch-seconds instant, `YYYY-MM-DD`.
  * Mirrors the scraper's `lisbonDay` (apps/server/src/scraper/fingerprint.ts)
  * and the web app's `dayKey` — via Intl so the API layer stays dependency-free.
  */
 export function lisbonDayKey(epochSeconds: number): string {
-	return new Intl.DateTimeFormat("en-CA", {
-		timeZone: "Europe/Lisbon",
-	}).format(new Date(epochSeconds * 1000));
+	return LISBON_DAY.format(new Date(epochSeconds * 1000));
 }
 
 /** Lowercase + strip diacritics + collapse non-alphanumerics (match key only). */

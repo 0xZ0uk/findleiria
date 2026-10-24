@@ -1,6 +1,8 @@
 import { db, schema } from "@events-tracker/db";
 import { inArray } from "drizzle-orm";
 
+import type { Conn } from "./conn";
+
 /**
  * Delete events together with their `event_sources` rows.
  *
@@ -11,13 +13,16 @@ import { inArray } from "drizzle-orm";
  * failed its FK check. Deleting dependents explicitly gives the intended
  * result without depending on a pragma.
  */
-export async function deleteEvents(ids: number[]): Promise<number> {
+export async function deleteEvents(
+	ids: number[],
+	conn: Conn = db,
+): Promise<number> {
 	const unique = [...new Set(ids)];
 	if (unique.length === 0) return 0;
-	await db
+	await conn
 		.delete(schema.eventSources)
 		.where(inArray(schema.eventSources.event_id, unique));
-	const deleted = await db
+	const deleted = await conn
 		.delete(schema.events)
 		.where(inArray(schema.events.id, unique))
 		.returning({ id: schema.events.id });

@@ -1,7 +1,13 @@
 /**
  * Source registry. Each upstream scraper follows the same contract
- * `() => Promise<RawEvent[]>` so future sources slot in here and reuse the
- * shared normalize/fingerprint/ingest pipeline.
+ * `() => Promise<ScrapeOutcome>` (`{ events: RawEvent[], failures,
+ * firstError }`, see runner.ts, plus the `pagesFetched` / `discovered`
+ * counts the run record keeps and, for a stateful source, a deferred
+ * `commit()` of its state that the runner applies only after ingest
+ * succeeded), so future sources slot in here and reuse the shared
+ * normalize/fingerprint/ingest pipeline. Helpers the sources have in common
+ * (PT dates, JSON-LD, HTML text, timing, the serial fetch gate) live in
+ * `./lib`.
  */
 import { scrape as scrapeBol } from "./bol";
 import { scrape as scrapeCaldas } from "./caldas";
@@ -89,3 +95,51 @@ export const sources = {
 } as const;
 
 export type SourceId = keyof typeof sources;
+
+/**
+ * How completely one scrape lists the source's CURRENT events (C5). Only a
+ * `full` source's run can say "this item is gone": ingest prunes rows such a
+ * source stopped listing. An `incremental` source only emits what is NEW (or
+ * changed) since its state file, so an item missing from a run means nothing
+ * and its rows are never pruned:
+ *
+ *   caldas, municipal, festasearraiais, cisterfestas  `seen[]` set of fetched
+ *                  items — known items are never emitted again;
+ *   obidos         `<lastmod>` watermark — only new/regenerated pages emit;
+ *   regiaoleiria   horizon months are fetched once (watermarked) and details
+ *                  are capped per run, so later months' items do not re-emit;
+ *   nocartaz       detail cache + capped hub grid: a card past the cap or a
+ *                  failed secondary hub drops out without the event ending.
+ *
+ * Every registry key must be classified (the Record type enforces it, a test
+ * pins the incremental set). When unsure, classify `incremental`: lingering
+ * rows are a nuisance, pruned live events are a bug.
+ */
+export type SourceListing = "full" | "incremental";
+
+export const SOURCE_LISTING: Record<SourceId, SourceListing> = {
+	leiriagenda: "full",
+	cmleiriarss: "full",
+	bol: "full",
+	eventbrite: "full",
+	viralagenda: "full",
+	ticketline: "full",
+	festasearraiais: "incremental",
+	cisterfestas: "incremental",
+	shotgun: "full",
+	municipal: "incremental",
+	obidos: "incremental",
+	regiaoleiria: "incremental",
+	caldas: "incremental",
+	nocartaz: "incremental",
+	figueiro: "full",
+	turismodocentro: "full",
+};
+
+/** True only for a registered source whose scrape is its whole listing. */
+export function listsFully(id: string): boolean {
+	return (
+		Object.hasOwn(SOURCE_LISTING, id) &&
+		SOURCE_LISTING[id as SourceId] === "full"
+	);
+}

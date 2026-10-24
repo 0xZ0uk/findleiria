@@ -18,7 +18,7 @@ import { createAuth } from "./auth";
 import { authDb } from "./db";
 import type { MailMessage } from "./mailer";
 import { createAuthRoutes } from "./routes";
-import { account, session as sessionTable, user } from "./schema";
+import { account, rateLimit, session as sessionTable, user } from "./schema";
 
 const ORIGIN = "http://localhost:3300";
 const EMAIL = "conta@findleiria.pt";
@@ -466,5 +466,59 @@ describe("stale unverified accounts", () => {
 			.from(account)
 			.where(eq(account.userId, rows[0]?.id ?? ""));
 		expect(accounts.map((a) => a.providerId)).toEqual(["credential"]);
+	});
+});
+
+/**
+ * Rate limits live in the auth database, so they hold across serverless
+ * instances. The shared instance above has them off (like better-auth outside
+ * production, because the suite signs in faster than 3 per 10s); this one turns
+ * them on.
+ */
+describe("rate limiting", () => {
+	const limited = createAuthRoutes(
+		createAuth(authDb, async () => {}, { rateLimit: true }),
+	);
+	const signIn = (ip: string) =>
+		limited.request("/api/auth/sign-in/email", {
+			method: "POST",
+			headers: {
+				origin: ORIGIN,
+				"content-type": "application/json",
+				"x-forwarded-for": ip,
+			},
+			body: JSON.stringify({
+				email: "ninguem@findleiria.pt",
+				password: PASSWORD,
+			}),
+		});
+
+	test("the 4th rapid sign-in from one address is a 429, and the count is a row", async () => {
+		const statuses: number[] = [];
+		for (let i = 0; i < 4; i++) {
+			statuses.push((await signIn("203.0.113.7")).status);
+		}
+
+		expect(statuses.slice(0, 3)).not.toContain(429);
+		expect(statuses[3]).toBe(429);
+
+		const rows = await authDb.select().from(rateLimit);
+		const row = rows.find((r) => r.key.includes("203.0.113.7"));
+		expect(row?.key).toContain("/sign-in/email");
+		expect(row?.count).toBe(3);
+		expect(row?.lastRequest).toBeGreaterThan(Date.now() - 60_000);
+	});
+
+	test("another address has its own budget", async () => {
+		expect((await signIn("203.0.113.8")).status).not.toBe(429);
+	});
+
+	test("the shared test instance is not limited", async () => {
+		for (let i = 0; i < 5; i++) {
+			const response = await request("/api/auth/sign-in/email", {
+				json: { email: "ninguem@findleiria.pt", password: PASSWORD },
+			});
+			expect(response.status).not.toBe(429);
+		}
 	});
 });

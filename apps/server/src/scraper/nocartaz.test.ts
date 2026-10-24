@@ -37,6 +37,13 @@ const inDistrict = (city: string | null | undefined) =>
 		(city ?? "").trim(),
 	);
 
+/** A scrape whose deferred state the runner then commits (C7). */
+async function scrapeCommitted(...args: Parameters<typeof scrape>) {
+	const result = await scrape(...args);
+	result.commit?.();
+	return result;
+}
+
 describe("parseCards (real hub fixture)", () => {
 	const cards = parseCards(listing);
 
@@ -357,7 +364,7 @@ describe("scrape", () => {
 
 	test("one listing fetch, then one detail fetch per unseen card", async () => {
 		const { deps: d, fetched, saved } = deps();
-		const result = await scrape(d, inDistrict);
+		const result = await scrapeCommitted(d, inDistrict);
 		expect(result.pagesFetched).toBe(3);
 		expect(result.discovered).toBe(2);
 		expect(result.events.length).toBe(2);
@@ -384,11 +391,12 @@ describe("scrape", () => {
 					city: "Leiria",
 					description: "descrição completa",
 					imageUrl: "https://www.nocartaz.pt/og/aaaaaaaaaaaaaaaa.webp",
+					cardWhen: "2026-10-01 21:00",
 				},
 			},
 		};
 		const { deps: d, fetched } = deps({ loadState: () => cache });
-		const result = await scrape(d, inDistrict);
+		const result = await scrapeCommitted(d, inDistrict);
 		expect(fetched).toEqual([
 			LISTING,
 			"https://www.nocartaz.pt/eventos/bbbbbbbbbbbbbbbb/",
@@ -401,6 +409,82 @@ describe("scrape", () => {
 		expect(cached.imageUrl).toBe(
 			"https://www.nocartaz.pt/og/aaaaaaaaaaaaaaaa.webp",
 		);
+	});
+
+	describe("C5 cached detail vs rescheduled card", () => {
+		const entry = (cardWhen?: string) => ({
+			title: "Detalhe cached",
+			startAt: "2026-09-20T21:00:00",
+			endAt: null,
+			venue: "Sala",
+			city: "Leiria",
+			description: null,
+			imageUrl: null,
+			...(cardWhen ? { cardWhen } : {}),
+		});
+		const aUrl = "https://www.nocartaz.pt/eventos/aaaaaaaaaaaaaaaa/";
+
+		test("the card's date changed: detail is refetched and the NEW date wins", async () => {
+			// Cached when the card listed 20 Sep; the card now lists 1 Oct.
+			const cache: NocartazState = {
+				details: { aaaaaaaaaaaaaaaa: entry("2026-09-20 21:00") },
+			};
+			const { deps: d, fetched, saved } = deps({ loadState: () => cache });
+			const result = await scrapeCommitted(d, inDistrict);
+			expect(fetched).toContain(aUrl);
+			const ev = result.events.find(
+				(e) => e.slug === "nocartaz-aaaaaaaaaaaaaaaa",
+			)!;
+			expect(ev.startAt).toBe(toEpochInLisbon(2026, 10, 1, 21, 0));
+			expect(saved[0]!.details.aaaaaaaaaaaaaaaa?.cardWhen).toBe(
+				"2026-10-01 21:00",
+			);
+		});
+
+		test("a legacy entry with no cardWhen is refetched once", async () => {
+			const cache: NocartazState = {
+				details: { aaaaaaaaaaaaaaaa: entry() },
+			};
+			const { deps: d, fetched } = deps({ loadState: () => cache });
+			await scrapeCommitted(d, inDistrict);
+			expect(fetched).toContain(aUrl);
+		});
+
+		test("a failed refetch drops the stale detail: the card's fresh date ships", async () => {
+			const cache: NocartazState = {
+				details: { aaaaaaaaaaaaaaaa: entry("2026-09-20 21:00") },
+			};
+			const { deps: d, saved } = deps({
+				loadState: () => cache,
+				responses: { [aUrl]: "ERR: 500 boom" },
+			});
+			const result = await scrapeCommitted(d, inDistrict);
+			const ev = result.events.find(
+				(e) => e.slug === "nocartaz-aaaaaaaaaaaaaaaa",
+			)!;
+			expect(ev.startAt).toBe(toEpochInLisbon(2026, 10, 1, 21, 0));
+			expect(saved[0]!.details).not.toHaveProperty("aaaaaaaaaaaaaaaa");
+		});
+
+		test("an ItemList-only card (no date) keeps its cached detail and cardWhen", async () => {
+			const itemListOnly = `<html><body><script type="application/ld+json">{"@type":"ItemList","itemListElement":[{"url":"${aUrl}","name":"Evento a"}]}</script></body></html>`;
+			const cache: NocartazState = {
+				details: { aaaaaaaaaaaaaaaa: entry("2026-09-20 21:00") },
+			};
+			const {
+				deps: d,
+				fetched,
+				saved,
+			} = deps({
+				loadState: () => cache,
+				responses: { [LISTING]: itemListOnly },
+			});
+			await scrapeCommitted(d, inDistrict);
+			expect(fetched).toEqual([LISTING]);
+			expect(saved[0]!.details.aaaaaaaaaaaaaaaa?.cardWhen).toBe(
+				"2026-09-20 21:00",
+			);
+		});
 	});
 
 	test("cache is pruned to the ids the page still lists", async () => {
@@ -427,7 +511,7 @@ describe("scrape", () => {
 			},
 		};
 		const { deps: d, saved } = deps({ loadState: () => cache });
-		await scrape(d, inDistrict);
+		await scrapeCommitted(d, inDistrict);
 		expect(Object.keys(saved[0]!.details).sort()).toEqual([
 			"aaaaaaaaaaaaaaaa",
 			"bbbbbbbbbbbbbbbb",
@@ -440,7 +524,7 @@ describe("scrape", () => {
 				"https://www.nocartaz.pt/eventos/aaaaaaaaaaaaaaaa/": "ERR: 500 boom",
 			},
 		});
-		const result = await scrape(d, inDistrict);
+		const result = await scrapeCommitted(d, inDistrict);
 		expect(result.failures).toBe(1);
 		expect(result.firstError).toContain("500 boom");
 		expect(result.events.map((e) => e.slug).sort()).toEqual([
@@ -460,7 +544,7 @@ describe("scrape", () => {
 				),
 			},
 		});
-		const result = await scrape(d, inDistrict);
+		const result = await scrapeCommitted(d, inDistrict);
 		expect(result.events.map((e) => e.slug)).toEqual([
 			"nocartaz-bbbbbbbbbbbbbbbb",
 		]);
@@ -481,7 +565,7 @@ describe("scrape", () => {
 				return detailWith("Leiria", "2026-10-01");
 			},
 		});
-		const result = await scrape(d, inDistrict);
+		const result = await scrapeCommitted(d, inDistrict);
 		expect(detailFetches).toBe(MAX_DETAIL_REQUESTS);
 		expect(result.failures).toBe(2);
 		expect(result.firstError).toContain("detail budget exhausted");
@@ -492,12 +576,31 @@ describe("scrape", () => {
 		const { deps: d } = deps({
 			responses: { [LISTING]: "ERR: 503 unavailable" },
 		});
-		const result = await scrape(d, inDistrict);
+		const result = await scrapeCommitted(d, inDistrict);
 		expect(result.events).toEqual([]);
 		expect(result.failures).toBe(1);
 		expect(result.firstError).toStartWith(LISTING);
 		expect(result.firstError).toContain("503 unavailable");
 		expect(result.pagesFetched).toBe(0);
+	});
+
+	test("S6: a dead listing page is fetched ONCE (http.ts owns retries)", async () => {
+		const { deps: d, fetched } = deps({
+			responses: { [LISTING]: "ERR: 404 gone" },
+		});
+		await scrapeCommitted(d, inDistrict);
+		expect(fetched).toEqual([LISTING]);
+	});
+
+	test("S7: a listing that parses to zero cards is a counted failure", async () => {
+		const { deps: d } = deps({
+			responses: { [LISTING]: "<html><body>Just a moment...</body></html>" },
+		});
+		const result = await scrapeCommitted(d, inDistrict);
+		expect(result.events).toEqual([]);
+		expect(result.failures).toBe(1);
+		expect(result.firstError).toContain("zero cards");
+		expect(result.firstError).toContain(LISTING);
 	});
 
 	test("a source with no cached state starts empty", () => {

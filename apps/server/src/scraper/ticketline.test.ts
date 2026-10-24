@@ -145,6 +145,26 @@ describe("S1 city + S2 impossible dates", () => {
 	});
 });
 
+describe("S3 failed detail fetch keeps the row", () => {
+	test("dead detail is counted but the row survives via the search-row fallback", async () => {
+		const now = () => toEpochInLisbon(2026, 9, 1);
+		const row = `<li itemscope itemtype="http://schema.org/Event"><a href="/evento/x-555" itemprop="url"></a><p itemprop="name">Show 555</p><span class="date" data-date="2026-10-01"></span><p itemprop="location">Teatro, Leiria</p></li>`;
+		const search = `<html><body><ul>${row}</ul></body></html>`;
+		const result = await scrape({
+			fetchText: async (url: string) => {
+				if (url === SEARCH_URL) return search;
+				throw new Error(`GET ${url} -> HTTP 500`);
+			},
+			sleep: async () => {},
+			now,
+			venueSearchUrl: SEARCH_URL,
+		});
+		expect(result.events.map((e) => e.slug)).toEqual(["tl-555"]);
+		expect(result.failures).toBe(1);
+		expect(result.firstError).toContain("HTTP 500");
+	});
+});
+
 describe("scrape (mock deps, offline)", () => {
 	test("filters to future Leiria events; dead detail counted not fatal", async () => {
 		const now = () => toEpochInLisbon(2026, 9, 1); // 2026-09-01 00:00 Lisbon

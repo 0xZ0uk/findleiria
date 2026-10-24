@@ -1,6 +1,7 @@
 import { errorMessage } from "./errors";
 import { toEpochInLisbon } from "./fingerprint";
 import { defaultFetchText } from "./http";
+import { defaultSleep } from "./lib/timing";
 import { plainText } from "./normalize";
 import type { RawEvent } from "./types";
 
@@ -90,9 +91,6 @@ export interface ScrapeDeps {
 	sleep: (ms: number) => Promise<void>;
 	now: number;
 }
-
-const defaultSleep = (ms: number) =>
-	new Promise<void>((r) => setTimeout(r, ms));
 
 /** Calendar parts of a source epoch (UTC parts: the feed pins local midnight). */
 export interface DayParts {

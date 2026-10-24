@@ -344,4 +344,19 @@ describe("scrape", () => {
 		expect(result.firstError).toContain("boom");
 		expect(result.pagesFetched).toBe(0);
 	});
+
+	test("S7: a listing that parses to zero items is a counted failure", async () => {
+		const result = await scrape(
+			{
+				fetchText: async () => "<html><body>Just a moment...</body></html>",
+				sleep: async () => {},
+				now: NOW,
+			},
+			isLeiriaDistrict,
+		);
+		expect(result.events).toEqual([]);
+		expect(result.failures).toBe(1);
+		expect(result.firstError).toContain("zero items");
+		expect(result.pagesFetched).toBe(1);
+	});
 });

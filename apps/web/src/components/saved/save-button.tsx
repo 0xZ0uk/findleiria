@@ -1,6 +1,6 @@
 import { Bookmark } from "lucide-react";
-import { useSaved } from "@/hooks/use-saved";
 import { signInHref } from "@/utils/route";
+import { useSavedStore } from "./saved-context";
 
 /**
  * Save / unsave one event.
@@ -19,7 +19,7 @@ export function SaveButton({
 	slug: string;
 	layout: "row" | "detail";
 }) {
-	const saved = useSaved();
+	const saved = useSavedStore();
 	const isSaved = saved.isSaved(slug);
 
 	const text = isSaved ? "Guardado" : "Guardar";
@@ -78,7 +78,7 @@ export function SaveButton({
 			data-slot="save"
 			data-saved={isSaved ? "true" : "false"}
 			data-save-slug={slug}
-			disabled={saved.pending || !saved.ready}
+			disabled={saved.isPendingSlug(slug) || !saved.ready}
 			className={`${baseClass} ${sizeClass} ${stateClass} disabled:opacity-50`}
 		>
 			<Bookmark

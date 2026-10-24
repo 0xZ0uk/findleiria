@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 
 import {
 	inferEpochs,
+	LISTING_BASE,
 	parseDateRange,
 	parseDetailCard,
 	parseListingLinks,
+	scrape,
 	slugFor,
 	toRawEvent,
 	YEAR_TOLERANCE_S,
@@ -147,6 +149,122 @@ describe("slugFor", () => {
 				"https://cister.fm/salaodefestas/festas-da-tremoceira-4-a-7-de-setembro/",
 			),
 		).toBe("cf-festas-da-tremoceira-4-a-7-de-setembro");
+	});
+});
+
+describe("S7 scrape: listing that parses to nothing is a failure", () => {
+	const mk = (
+		fetchText: (u: string) => Promise<string>,
+		seen: string[] = [],
+	) => ({
+		fetchText,
+		sleep: async () => {},
+		loadState: () => ({ seen }),
+		saveState: () => {},
+		now: NOW,
+	});
+
+	test("garbage page 1 -> failure counted with the url", async () => {
+		const res = await scrape(
+			mk(async () => "<html><body>Just a moment...</body></html>"),
+		);
+		expect(res.events).toEqual([]);
+		expect(res.failures).toBe(1);
+		expect(res.firstError).toContain("zero links");
+		expect(res.firstError).toContain(LISTING_BASE);
+	});
+
+	test("steady state (every link already seen) is NOT a failure", async () => {
+		const res = await scrape(
+			mk(async () => listingHtml, parseListingLinks(listingHtml)),
+		);
+		expect(res.failures).toBe(0);
+		expect(res.events).toEqual([]);
+		expect(res.discovered).toBeGreaterThan(40);
+	});
+});
+
+describe("S13 scrape(): happy path and a dead detail page", () => {
+	const GOOD =
+		"https://cister.fm/salaodefestas/festas-da-tremoceira-4-a-7-de-setembro/";
+	const DEAD = "https://cister.fm/salaodefestas/festas-da-vestiaria/";
+	const listing = `<html><body><a href="${GOOD}">a</a><a href="${DEAD}">b</a></body></html>`;
+
+	function run(
+		opts: {
+			seen?: string[];
+			inScope?: (c: string | null | undefined) => boolean;
+		} = {},
+	) {
+		const fetched: string[] = [];
+		const saved: { seen: string[] }[] = [];
+		const promise = scrape(
+			{
+				fetchText: async (url) => {
+					fetched.push(url);
+					if (url === LISTING_BASE || url.includes("/page/")) {
+						return listing;
+					}
+					if (url === GOOD) {
+						return detailHtml;
+					}
+					throw new Error(`GET ${url} -> HTTP 500`);
+				},
+				sleep: async () => {},
+				loadState: () => ({ seen: opts.seen ?? [] }),
+				saveState: (s) => {
+					saved.push(s);
+				},
+				now: NOW,
+			},
+			opts.inScope ?? (() => true),
+		);
+		return { promise, fetched, saved };
+	}
+
+	test("emits the dated festa, counts the dead detail, marks only the loaded one seen on commit", async () => {
+		const { promise, saved } = run();
+		const res = await promise;
+		expect(res.events.map((e) => e.slug)).toEqual([
+			"cf-festas-da-tremoceira-4-a-7-de-setembro",
+		]);
+		expect(res.events[0]?.startAt).toBe(toEpochInLisbon(2026, 9, 4));
+		expect(res.discovered).toBe(2);
+		expect(res.failures).toBe(1);
+		expect(res.firstError).toContain("HTTP 500");
+		// listing pages 1 and 2 + the one detail that loaded
+		expect(res.pagesFetched).toBe(3);
+		// C7: nothing is saved until the runner commits after ingest, and the
+		// dead detail is not marked seen: it is retried next run.
+		expect(saved).toHaveLength(0);
+		res.commit();
+		expect(saved).toHaveLength(1);
+		expect(saved[0]?.seen).toEqual([GOOD]);
+	});
+
+	test("the listing walk stops at the first page with no novel urls", async () => {
+		const { promise, fetched } = run();
+		await promise;
+		// page 1 (novel) + page 2 (same links, nothing novel -> stop); no page 3
+		expect(fetched.filter((u) => u.startsWith(LISTING_BASE))).toEqual([
+			LISTING_BASE,
+			`${LISTING_BASE}page/2/`,
+		]);
+	});
+
+	test("the district gate drops an out-of-scope festa without a failure", async () => {
+		const { promise } = run({ inScope: () => false });
+		const res = await promise;
+		expect(res.events).toEqual([]);
+		expect(res.failures).toBe(1); // only the dead page
+	});
+
+	test("seen urls are not fetched again", async () => {
+		const { promise, fetched } = run({ seen: [GOOD, DEAD] });
+		const res = await promise;
+		expect(fetched.filter((u) => u.includes("/salaodefestas/"))).toEqual([]);
+		expect(res.events).toEqual([]);
+		expect(res.failures).toBe(0);
 	});
 });
 

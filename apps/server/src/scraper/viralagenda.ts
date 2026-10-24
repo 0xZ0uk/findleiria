@@ -1,8 +1,11 @@
 import * as cheerio from "cheerio";
 import { DateTime } from "luxon";
 import { isLeiriaDistrict } from "./district";
-import { toEpochInLisbonOrNull } from "./fingerprint";
 import { defaultFetchText } from "./http";
+import { createFetchGate } from "./lib/fetch-gate";
+import { findJsonLdEvent } from "./lib/jsonld";
+import { ymdToEpoch } from "./lib/pt-dates";
+import { defaultSleep, randomDelay } from "./lib/timing";
 import type { RawEvent } from "./types";
 
 /**
@@ -154,45 +157,23 @@ export interface DetailEvent {
 	city: string | null;
 }
 
-/** Parse the first JSON-LD `<script>` into the event (null when absent). */
+/**
+ * Parse the page's schema.org event JSON-LD (Event or any subtype such as
+ * MusicEvent/Festival, bare, in an array, or inside `@graph`) into the detail
+ * fields. Null when the page carries no event block.
+ */
 export function parseDetail(html: string): DetailEvent | null {
-	const $ = cheerio.load(html);
-	let data: unknown = null;
-	$('script[type="application/ld+json"]').each((_, s) => {
-		if (data !== null) {
-			return;
-		}
-		const text = $(s).text().trim();
-		if (!text) {
-			return;
-		}
-		try {
-			data = JSON.parse(text);
-		} catch {
-			// malformed block; try the next one
-		}
-	});
-	if (data === null || typeof data !== "object") {
+	const ev = findJsonLdEvent<{
+		name?: unknown;
+		startDate?: unknown;
+		endDate?: unknown;
+		image?: unknown;
+		description?: unknown;
+		location?: { name?: unknown; address?: { addressLocality?: unknown } };
+	}>(html);
+	if (!ev) {
 		return null;
 	}
-	const root = data as {
-		"@graph"?: unknown[];
-		name?: unknown;
-		startDate?: unknown;
-		endDate?: unknown;
-		image?: unknown;
-		description?: unknown;
-		location?: { name?: unknown; address?: { addressLocality?: unknown } };
-	};
-	const node = (root as { "@graph"?: unknown[] })["@graph"]?.[0] ?? root;
-	const ev = node as {
-		name?: unknown;
-		startDate?: unknown;
-		endDate?: unknown;
-		image?: unknown;
-		description?: unknown;
-		location?: { name?: unknown; address?: { addressLocality?: unknown } };
-	};
 	const loc = ev.location;
 	const addr = loc?.address;
 	return {
@@ -224,28 +205,7 @@ export function isoToEpoch(iso: string | null | undefined): number | null {
 		const dt = DateTime.fromISO(s, { zone: LISBON_ZONE });
 		return dt.isValid ? Math.round(dt.toSeconds()) : null;
 	}
-	const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-	if (!m) {
-		return null;
-	}
-	return toEpochInLisbonOrNull(
-		Number.parseInt(m[1] ?? "0", 10),
-		Number.parseInt(m[2] ?? "0", 10),
-		Number.parseInt(m[3] ?? "0", 10),
-	);
-}
-
-/** Date-only epoch (00:00 Lisbon) for a "YYYY-MM-DD" fragment. */
-function dateOnlyEpoch(iso: string): number | null {
-	const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
-	if (!m) {
-		return null;
-	}
-	return toEpochInLisbonOrNull(
-		Number.parseInt(m[1] ?? "0", 10),
-		Number.parseInt(m[2] ?? "0", 10),
-		Number.parseInt(m[3] ?? "0", 10),
-	);
+	return ymdToEpoch(s);
 }
 
 export interface ScrapeDeps {
@@ -254,11 +214,6 @@ export interface ScrapeDeps {
 	/** Override facet set (used by offline tests to shrink the fan-out). */
 	facets?: readonly string[];
 }
-
-const defaultSleep = (ms: number) =>
-	new Promise<void>((r) => setTimeout(r, ms));
-const randomDelay = () =>
-	MIN_DELAY_MS + Math.floor(Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS + 1));
 
 export interface ScrapeResult {
 	events: RawEvent[];
@@ -297,11 +252,11 @@ export function toRawEvent(
 	} else if (detailStart !== null) {
 		startAt = detailStart;
 	} else if (card.dateStart) {
-		startAt = dateOnlyEpoch(card.dateStart);
+		startAt = ymdToEpoch(card.dateStart);
 	}
 	if (!startAt && card.dateStart) {
 		// last resort: the date alone, i.e. resolve even a placeholder time date
-		startAt = dateOnlyEpoch(card.dateStart);
+		startAt = ymdToEpoch(card.dateStart);
 	}
 
 	const detailEnd = isoToEpoch(detail?.endDate);
@@ -312,7 +267,7 @@ export function toRawEvent(
 	} else if (detailEnd !== null && detailEnd !== startAt) {
 		endAt = detailEnd;
 	} else if (cardEnd) {
-		endAt = card.hasTime ? isoToEpoch(cardEnd) : dateOnlyEpoch(cardEnd);
+		endAt = card.hasTime ? isoToEpoch(cardEnd) : ymdToEpoch(cardEnd);
 	}
 	// Sanity: an end before its start (e.g. a date-only detail endDate that
 	// resolves to midnight of the start day) is noise — drop it.
@@ -348,20 +303,12 @@ export async function scrape(
 ): Promise<ScrapeResult> {
 	const facets = deps.facets?.length ? deps.facets : DEFAULT_FACETS;
 	const urlQueue = listingUrls(facets);
-	let requests = 0;
-	let chain: Promise<unknown> = Promise.resolve();
-	const fetchPage = (url: string): Promise<string> => {
-		const next = chain.then(async () => {
-			if (requests >= MAX_REQUESTS) {
-				throw new Error(`request cap ${MAX_REQUESTS} reached`);
-			}
-			requests++;
-			await deps.sleep(randomDelay());
-			return deps.fetchText(url);
-		});
-		chain = next.catch(() => {});
-		return next;
-	};
+	const { fetchPage } = createFetchGate({
+		fetchText: deps.fetchText,
+		sleep: deps.sleep,
+		maxRequests: MAX_REQUESTS,
+		delay: () => randomDelay(MIN_DELAY_MS, MAX_DELAY_MS - MIN_DELAY_MS + 1),
+	});
 
 	const cardsById = new Map<string, ListingCard>();
 	let failures = 0;
@@ -386,6 +333,13 @@ export async function scrape(
 		}
 	}
 
+	// Broken markup / challenge page parses to zero cards across every facet:
+	// that is a failure, not a quiet day.
+	if (cardsById.size === 0) {
+		failures++;
+		firstError ??= "listing parsed to zero cards across all facets";
+	}
+
 	// Detail phase.
 	const cards = [...cardsById.values()];
 	const events: RawEvent[] = [];
@@ -406,7 +360,7 @@ export async function scrape(
 				if (!firstError) {
 					firstError = err instanceof Error ? err.message : String(err);
 				}
-				continue; // keep the card via fallback below
+				detail = null; // keep the card via the listing-only fallback below
 			}
 			const raw = toRawEvent(card, detail);
 			if (raw) {

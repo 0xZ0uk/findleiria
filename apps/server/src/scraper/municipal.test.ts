@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 
 import { toEpochInLisbon } from "./fingerprint";
 import {
-	PAGE_ATTEMPTS,
 	parseDetail,
 	parseListingDates,
 	parseListingItems,
@@ -441,7 +440,7 @@ describe("scrape (injected fetchText over the real fixtures)", () => {
 		expect(res.events.some((e) => e.city === "Marinha Grande")).toBe(false);
 	});
 
-	test("a page that 403s mid-walk is retried, skipped, and the tail still walks", async () => {
+	test("a page that 403s mid-walk is skipped (one attempt), and the tail still walks", async () => {
 		// Live regression: the Marinha Grande paginator answered 403 at page 31
 		// of 44, and the old `break` meant pages 32-44 were never fetched on
 		// ANY run — their items could never be discovered.
@@ -460,7 +459,8 @@ describe("scrape (injected fetchText over the real fixtures)", () => {
 			},
 			() => true,
 		);
-		expect(deadPageAttempts).toBe(PAGE_ATTEMPTS);
+		// http.ts owns retries: the scraper makes exactly ONE attempt per page.
+		expect(deadPageAttempts).toBe(1);
 		// 156 listing pages − the dead one + 55 detail pages.
 		expect(res.pagesFetched).toBe(210);
 		expect(res.discovered).toBe(163);
@@ -469,9 +469,56 @@ describe("scrape (injected fetchText over the real fixtures)", () => {
 		expect(res.firstError).toContain("page=31");
 	});
 
+	test("S7: a council whose first page parses to zero items is a counted failure", async () => {
+		const base = fetchFor(null);
+		const batalha = SITES.find((s) => s.key === "batalha")!;
+		const res = await scrape(
+			{
+				...deps([]),
+				fetchText: async (u: string) =>
+					u === batalha.listing
+						? "<html><body>Just a moment...</body></html>"
+						: base(u),
+			},
+			() => true,
+		);
+		expect(res.failures).toBe(1);
+		expect(res.firstError).toContain("zero items");
+		expect(res.firstError).toContain(batalha.listing);
+		// The other councils still ran.
+		expect(res.events.length).toBeGreaterThan(0);
+	});
+
 	test("out-of-district city is dropped by the injected gate", async () => {
 		const res = await scrape(deps([]), (city) => city === "Batalha");
 		expect(res.events.length).toBeGreaterThan(0);
 		expect(res.events.every((e) => e.city === "Batalha")).toBe(true);
+	});
+
+	test("C7: seen is saved only on commit; an unparsable detail stays unseen, gated-out ones are seen", async () => {
+		const base = fetchFor(null);
+		const first = await scrape(deps([]), () => true);
+		const victim = first.events[0]?.url ?? "";
+		const saved: { seen: string[] }[] = [];
+		const res = await scrape(
+			{
+				...deps([]),
+				saveState: (s: { seen: string[] }) => {
+					saved.push(s);
+				},
+				fetchText: async (u: string) =>
+					u === victim ? "<html><body></body></html>" : base(u),
+			},
+			(city) => city === "Batalha",
+		);
+		expect(saved).toHaveLength(0);
+		res.commit();
+		const seen = new Set(saved[0]?.seen ?? []);
+		expect(victim).not.toBe("");
+		expect(seen.has(victim)).toBe(false);
+		// Emitted and gated-out (other councils) items alike are done with.
+		for (const e of first.events) {
+			if (e.url !== victim) expect(seen.has(e.url)).toBe(true);
+		}
 	});
 });

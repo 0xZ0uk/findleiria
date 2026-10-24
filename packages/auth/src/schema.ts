@@ -7,9 +7,9 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 /**
- * better-auth's four tables, hand-written to match the field set better-auth
+ * better-auth's tables, hand-written to match the field set better-auth
  * 1.7.4 declares (`getAuthTables()` in `better-auth/db`):
- * user, session, account, verification.
+ * user, session, account, verification, and rateLimit (database storage).
  *
  * TS keys stay camelCase because that is what the drizzle adapter looks up;
  * SQL columns are snake_case. Timestamps are epoch seconds (`timestamp` mode),
@@ -107,3 +107,18 @@ export const verification = sqliteTable(
 	},
 	(table) => [index("verification_identifier_idx").on(table.identifier)],
 );
+
+/**
+ * better-auth's rate-limit counters (`rateLimit: { storage: "database" }`).
+ *
+ * Serverless instances share nothing in memory, so the counters live here: one
+ * row per client-IP + path key. `lastRequest` is epoch MILLISECONDS as a plain
+ * number (not a `timestamp` column) because better-auth compares it against
+ * `Date.now()`; SQLite integers are 64-bit, so it fits.
+ */
+export const rateLimit = sqliteTable("rate_limit", {
+	id: text("id").primaryKey(),
+	key: text("key").notNull().unique(),
+	count: integer("count").notNull(),
+	lastRequest: integer("last_request").notNull(),
+});

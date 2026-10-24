@@ -3,9 +3,10 @@ import { readFileSync } from "node:fs";
 
 import {
 	buildRawEvents,
-	isLeiriaVenue,
+	LISTING_URLS,
 	parseDetailSessions,
 	parseListingLinks,
+	scrape,
 } from "./bol";
 import { toEpochInLisbon } from "./fingerprint";
 
@@ -56,24 +57,6 @@ describe("parseListingLinks (offline fixture)", () => {
 		);
 		const dup = links.filter((l) => l.id === 168837);
 		expect(dup.length).toBe(1);
-	});
-});
-
-describe("isLeiriaVenue (Leiria pre-filter)", () => {
-	test("matches known Leiria venue slugs", () => {
-		expect(isLeiriaVenue("...-teatro_miguel_franco/")).toBe(true);
-		expect(isLeiriaVenue("...-mercado_de_santana/")).toBe(true);
-		expect(isLeiriaVenue("teatro_miguel_franco")).toBe(true);
-		expect(isLeiriaVenue("mercado_de_santana")).toBe(true);
-		expect(isLeiriaVenue("casa_da_musica_de_leiria")).toBe(true);
-	});
-
-	test("rejects non-Leiria venue slugs", () => {
-		expect(isLeiriaVenue("c_c_viana_do_castelo")).toBe(false);
-		expect(isLeiriaVenue("coliseu_de_lisboa")).toBe(false);
-		expect(isLeiriaVenue("ccb")).toBe(false);
-		expect(isLeiriaVenue("coliseu_porto_ageas")).toBe(false);
-		expect(isLeiriaVenue("aula_magna")).toBe(false);
 	});
 });
 
@@ -128,5 +111,137 @@ describe("buildRawEvents (offline fixture)", () => {
 		// segment); raw events carry city=null and ingest resolves it from
 		// the venue name. No city-scope gate here anymore.
 		expect(events[0]?.city).toBeNull();
+	});
+});
+
+const sessionDetail = (dateParts: string[], times: string[]) => `
+<div class="datas-sessoes"><div class="datas">
+${dateParts.map((d) => `<div class="sessao"><div class="ano">2026</div><div class="mes">dez</div><div class="dia">${d}</div></div>`).join("")}
+</div><div class="proxima-sessao">${times.map((t) => `<span>${t}</span>`).join("")}</div></div>`;
+
+describe("S5 same-day sessions get distinct slugs", () => {
+	const card = {
+		id: 7,
+		url: "https://www.bol.pt/Comprar/Bilhetes/7-peca-teatro_x/",
+		eventSlug: "peca",
+		venueSlug: "teatro_x",
+	};
+
+	test("earliest keeps the bare slug, later same-day session is suffixed", () => {
+		const events = buildRawEvents(
+			card,
+			sessionDetail(["05", "05"], ["05 dez 2026 21:30", "05 dez 2026 18:30"]),
+		);
+		expect(events.length).toBe(2);
+		const bySlug = new Map(events.map((e) => [e.slug, e.startAt]));
+		expect(bySlug.get("peca")).toBe(toEpochInLisbon(2026, 12, 5, 18, 30));
+		expect(bySlug.get("peca-2130")).toBe(toEpochInLisbon(2026, 12, 5, 21, 30));
+	});
+
+	test("sessions on different days all keep the bare slug", () => {
+		const events = buildRawEvents(
+			card,
+			sessionDetail(["05", "06"], ["05 dez 2026 21:30", "06 dez 2026 21:30"]),
+		);
+		expect(events.map((e) => e.slug)).toEqual(["peca", "peca"]);
+	});
+
+	test("a single session keeps exactly the pre-existing slug", () => {
+		const events = buildRawEvents(card, detailHtml);
+		expect(events.map((e) => e.slug)).toEqual(["peca"]);
+	});
+});
+
+describe("scrape (mock deps, offline)", () => {
+	const deps = (fetchText: (url: string) => Promise<string>) => ({
+		fetchText,
+		sleep: async () => {},
+	});
+
+	test("non-Leiria-city venues from the district listing are kept (no venue gate)", async () => {
+		const link = (id: number, slug: string) =>
+			`<a href="/Comprar/Bilhetes/${id}-${slug}/">x</a>`;
+		const listing = `<html><body>${link(1, "show_a-cine_teatro_caldas")}${link(2, "show_b-teatro_pombal")}</body></html>`;
+		const result = await scrape(
+			deps(async (url) => (LISTING_URLS.includes(url) ? listing : detailHtml)),
+		);
+		expect(result.failures).toBe(0);
+		expect(new Set(result.events.map((e) => e.venueName))).toEqual(
+			new Set(["Cine Teatro Caldas", "Teatro Pombal"]),
+		);
+		expect([...result.venueSlugs].sort()).toEqual([
+			"cine_teatro_caldas",
+			"teatro_pombal",
+		]);
+	});
+
+	test("a failed listing fetch is counted with a descriptive error", async () => {
+		const link = `<a href="/Comprar/Bilhetes/1-show_a-teatro_x/">x</a>`;
+		const result = await scrape(
+			deps(async (url) => {
+				if (url === LISTING_URLS[0]) throw new Error("HTTP 503");
+				return LISTING_URLS.includes(url) ? `<html>${link}</html>` : detailHtml;
+			}),
+		);
+		expect(result.failures).toBe(1);
+		expect(result.firstError).toContain("listing");
+		expect(result.firstError).toContain("HTTP 503");
+		expect(result.events.length).toBeGreaterThan(0);
+	});
+
+	test("S13: real listing fixture, one detail fetch per unique link, none failing", async () => {
+		const unique = new Map(
+			parseListingLinks(listingHtml).map((l) => [l.id, l] as const),
+		);
+		const fetched: string[] = [];
+		const result = await scrape(
+			deps(async (url) => {
+				fetched.push(url);
+				return LISTING_URLS.includes(url) ? listingHtml : detailHtml;
+			}),
+		);
+		expect(unique.size).toBeGreaterThan(0);
+		expect(result.failures).toBe(0);
+		expect(result.firstError).toBeNull();
+		// listings are deduped by event id across LISTING_URLS, then one detail each
+		expect(fetched.length).toBe(LISTING_URLS.length + unique.size);
+		expect(result.events.length).toBeGreaterThanOrEqual(unique.size);
+		expect(result.events.every((e) => e.startAt != null)).toBe(true);
+	});
+
+	test("S13: a detail fetch that throws is counted; the other events still come out", async () => {
+		const link = (id: number, slug: string) =>
+			`<a href="/Comprar/Bilhetes/${id}-${slug}/">x</a>`;
+		const listing = `<html>${link(1, "show_a-teatro_x")}${link(2, "show_b-teatro_y")}${link(3, "show_c-teatro_z")}</html>`;
+		const result = await scrape(
+			deps(async (url) => {
+				if (LISTING_URLS.includes(url)) {
+					return listing;
+				}
+				if (url.includes("/2-")) {
+					throw new Error("HTTP 500");
+				}
+				return detailHtml;
+			}),
+		);
+		expect(result.failures).toBe(1);
+		expect(result.firstError).toContain("HTTP 500");
+		expect(new Set(result.events.map((e) => e.venueName))).toEqual(
+			new Set(["Teatro X", "Teatro Z"]),
+		);
+		expect([...result.venueSlugs].sort()).toEqual([
+			"teatro_x",
+			"teatro_y",
+			"teatro_z",
+		]);
+	});
+
+	test("listings that parse to zero links are a failure", async () => {
+		const result = await scrape(
+			deps(async () => "<html><body>checkpoint</body></html>"),
+		);
+		expect(result.events.length).toBe(0);
+		expect(result.failures).toBe(1);
+		expect(result.firstError).toContain("zero event links");
 	});
 });

@@ -192,6 +192,14 @@ describe("decodeEntities (single canonical table)", () => {
 		expect(decodeEntities("x&#0;y")).toBe("x&#0;y");
 	});
 
+	test("astral characters survive as hex, decimal and UTF-16 surrogate-half entities", () => {
+		// cm-leiria's feed emits emoji both ways; the surrogate halves arrive as
+		// two numeric entities and must re-join (the old private decoder's job).
+		expect(decodeEntities("&#x1F4CC;")).toBe("📌");
+		expect(decodeEntities("&#128204;")).toBe("📌");
+		expect(decodeEntities("&#55357;&#56524;")).toBe("📌");
+	});
+
 	test("strips the hydration comments and leaves real ampersands alone", () => {
 		expect(decodeEntities("set<!-- -->.")).toBe("set.");
 		expect(decodeEntities("Le Raincy & Foz do Arelho")).toBe(

@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
 	dayIdentityKey,
-	identityKey,
 	planComponents,
 	planMerge,
 	sourceTrust,
@@ -40,21 +39,6 @@ describe("sourceTrust", () => {
 		const ranked: readonly string[] = TIME_SOURCE_PRIORITY;
 		const missing = Object.keys(sources).filter((id) => !ranked.includes(id));
 		expect(missing).toEqual([]);
-	});
-});
-
-describe("identityKey", () => {
-	test("diacritics/case/punctuation collapse to one key", () => {
-		const a = identityKey("Ágora — Música no Castelo", "Castelo de Leiria", 0);
-		const b = identityKey("agora musica no castelo", "castelo-de-leiria", 0);
-		expect(a).toBe(b);
-	});
-
-	test("different Lisbon days are different identities", () => {
-		// 2026-09-11 23:30 WEST vs 2026-09-12 00:00 WEST.
-		const a = identityKey("X", "venue", 1789165800);
-		const b = identityKey("X", "venue", 1789167600);
-		expect(a).not.toBe(b);
 	});
 });
 

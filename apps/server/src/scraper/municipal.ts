@@ -1,7 +1,10 @@
 import { isLeiriaDistrict } from "./district";
 import { errorMessage } from "./errors";
-import { toEpochInLisbon } from "./fingerprint";
+import { toEpochInLisbonOrNull } from "./fingerprint";
 import { defaultFetchText } from "./http";
+import { textOf } from "./lib/html";
+import { monthFromPrefix } from "./lib/pt-dates";
+import { defaultSleep, randomDelay } from "./lib/timing";
 import { decodeEntities } from "./normalize";
 import { loadState, saveState } from "./state";
 import type { RawEvent } from "./types";
@@ -155,6 +158,8 @@ export interface ScrapeResult {
 	pagesFetched: number;
 	/** Unique detail urls discovered across all listing pages. */
 	discovered: number;
+	/** Saves the new seen urls; the runner calls it after ingest (C7). */
+	commit: () => void;
 }
 
 export interface ScrapeDeps {
@@ -165,41 +170,10 @@ export interface ScrapeDeps {
 	now: number;
 }
 
-const defaultSleep = (ms: number) =>
-	new Promise<void>((r) => setTimeout(r, ms));
-const randomDelay = () => 350 + Math.floor(Math.random() * 300);
-
-const MONTHS: Record<string, number> = {
-	jan: 1,
-	fev: 2,
-	mar: 3,
-	abr: 4,
-	mai: 5,
-	jun: 6,
-	jul: 7,
-	ago: 8,
-	set: 9,
-	out: 10,
-	nov: 11,
-	dez: 12,
-};
-
 // Entity decoding lives in ./normalize: one canonical table for every
 // SLICE_9 source. The private copy that lived here had drifted (it knew
 // `&ecirc;`/`&auml;`, the shared one knew `&lsquo;`), so identical CMS markup
 // decoded differently depending on which scraper read it.
-
-function stripTags(html: string): string {
-	return html
-		.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
-		.replace(/<br\s*\/?>/gi, " ")
-		.replace(/<\/(p|div|li|h[1-6])>/gi, " ")
-		.replace(/<[^>]*>/g, " ");
-}
-
-function textOf(html: string): string {
-	return decodeEntities(stripTags(html)).replace(/\s+/g, " ").trim();
-}
 
 function monthNumber(token: string): number | null {
 	const trimmed = decodeEntities(token).trim();
@@ -209,12 +183,7 @@ function monthNumber(token: string): number | null {
 			return n;
 		}
 	}
-	const key = trimmed
-		.normalize("NFD")
-		.replace(/[\u0300-\u036f]/g, "")
-		.toLowerCase()
-		.slice(0, 3);
-	return MONTHS[key] ?? null;
+	return monthFromPrefix(trimmed);
 }
 
 /** `26` -> 2026, `2026` -> 2026. */
@@ -259,11 +228,7 @@ function epochOrNull(
 	) {
 		return null;
 	}
-	try {
-		return toEpochInLisbon(year, month, day, hour, minute);
-	} catch {
-		return null;
-	}
+	return toEpochInLisbonOrNull(year, month, day, hour, minute);
 }
 
 /** Epoch (Lisbon wall clock) from a source `YYYY-MM-DD[ T]HH:mm[:ss]` string. */
@@ -617,11 +582,6 @@ export function toRawEvent(
 	};
 }
 
-/** Attempts per listing page before that page is skipped as dead. */
-export const PAGE_ATTEMPTS = 3;
-/** Backoff between listing-page attempts (ms), indexed by attempt. */
-export const PAGE_BACKOFF_MS: readonly number[] = [2_000, 6_000];
-
 export async function scrape(
 	deps: ScrapeDeps = {
 		fetchText: defaultFetchText,
@@ -639,7 +599,10 @@ export async function scrape(
 
 	const state = deps.loadState();
 	const seen = new Set(state.seen);
+	/** Fetched this run (never fetched twice in one walk). */
 	const fetched = new Set<string>();
+	/** Fetched and emitted or deliberately skipped: marked seen on commit. */
+	const handled = new Set<string>();
 	const discovered = new Set<string>();
 	const events: RawEvent[] = [];
 	const delay = () => deps.sleep(randomDelay());
@@ -654,20 +617,16 @@ export async function scrape(
 				page === 1 || !site.paginator
 					? site.listing
 					: `${site.listing}?${site.paginator}_page=${page}&paginating=true`;
+			// One attempt: http.ts owns retries (and the 4xx/Retry-After policy),
+			// so wrapping it here would stack up to 9 requests per page.
 			let html: string | null = null;
 			let lastError: string | null = null;
-			for (let attempt = 0; attempt < PAGE_ATTEMPTS; attempt++) {
-				try {
-					await delay();
-					html = await deps.fetchText(url);
-					pagesFetched++;
-					break;
-				} catch (err) {
-					lastError = errorMessage(err);
-					if (attempt < PAGE_ATTEMPTS - 1) {
-						await deps.sleep(PAGE_BACKOFF_MS[attempt] ?? 5_000);
-					}
-				}
+			try {
+				await delay();
+				html = await deps.fetchText(url);
+				pagesFetched++;
+			} catch (err) {
+				lastError = errorMessage(err);
 			}
 			if (html === null) {
 				// Paginator pages are addressed explicitly (`_page=N`), so a
@@ -683,7 +642,14 @@ export async function scrape(
 				continue;
 			}
 			deadPages = 0;
-			for (const item of parseListingItems(html, site)) {
+			const items = parseListingItems(html, site);
+			if (page === 1 && items.length === 0) {
+				// A council's first listing page always lists events: zero items
+				// means broken markup or a challenge page, not a quiet day.
+				failures++;
+				firstError ??= `${url}: listing parsed to zero items`;
+			}
+			for (const item of items) {
 				discovered.add(item.url);
 				// Already ingested in a previous run, or already handled on an
 				// earlier page of THIS run (a paginator can repeat an item when
@@ -703,14 +669,20 @@ export async function scrape(
 					detailRequests++;
 					pagesFetched++;
 					fetched.add(item.url);
-					const raw = toRawEvent(
-						site,
-						item.url,
-						parseDetail(detailHtml),
-						deps.now,
-					);
-					if (raw && isInScope(raw.city)) {
-						events.push(raw);
+					const detail = parseDetail(detailHtml);
+					const raw = toRawEvent(site, item.url, detail, deps.now);
+					if (raw) {
+						// Emitted, or deliberately out of district: done with it.
+						handled.add(item.url);
+						if (isInScope(raw.city)) {
+							events.push(raw);
+						}
+					} else if (
+						// Parses fine and is merely over: a deliberate skip too.
+						// No title or no date is a parse failure: retried next run.
+						toRawEvent(site, item.url, detail, Number.NEGATIVE_INFINITY)
+					) {
+						handled.add(item.url);
 					}
 				} catch (err) {
 					failures++;
@@ -720,13 +692,15 @@ export async function scrape(
 		}
 	}
 
-	deps.saveState({ seen: [...new Set([...state.seen, ...fetched])] });
-
 	return {
 		events,
 		failures,
 		firstError,
 		pagesFetched,
 		discovered: discovered.size,
+		// Deferred (C7): the runner saves only after ingest committed. Only
+		// handled items are marked; a failed fetch or parse is retried.
+		commit: () =>
+			deps.saveState({ seen: [...new Set([...state.seen, ...handled])] }),
 	};
 }

@@ -203,6 +203,22 @@ describe("impossible dates (S2)", () => {
 	});
 });
 
+describe("entity decoding (canonical decoder, feed double-escaping)", () => {
+	// The feed XML-escapes an HTML document, so every entity arrives escaped
+	// twice; curly quotes fold to the straight ones this feed has always used.
+	const feed = `<rss><channel><item>
+      <title>Concerto &amp;amp; Festa &amp;#8220;Aberta&amp;#8221; d&amp;#8217;Avó &amp;#55357;&amp;#56524;</title>
+      <description>&lt;p&gt;12 de novembro de 2026 às 21h30&lt;/p&gt;&lt;p&gt;📌Teatro Miguel Franco&lt;/p&gt;</description>
+      <pubDate>Mon, 05 Oct 2026 10:00:00 +0000</pubDate>
+      <link>https://www.cm-leiria.pt/evento/concerto-aberta</link>
+    </item></channel></rss>`;
+
+	test("title is decoded, quotes straightened, surrogate pairs rejoined", () => {
+		const [event] = parseFeed(feed);
+		expect(event?.title).toBe('Concerto & Festa "Aberta" d\'Avó 📌');
+	});
+});
+
 describe("fingerprintUndated", () => {
 	test("same title + venue => identical fingerprint", () => {
 		const a = fingerprintUndated(

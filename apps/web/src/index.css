@@ -1,9 +1,6 @@
 @import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
 @import "@events-tracker/ui/globals.css";
 
-@source "../../../packages/ui/src/**/*.{ts,tsx}";
 @source "./**/*.{ts,tsx}";
 
 /* Porta443: dark is the DEFAULT canvas; the theme toggle adds `.light`
@@ -35,6 +32,14 @@
 		outline-style: solid;
 		outline-width: 2px;
 	}
+}
+
+/* After a client-side navigation the app moves focus to the new page's heading
+   (or <main>) so screen readers announce it; see focusPage in app.tsx. It is a
+   landmark, not a control, so it draws no ring. */
+main[tabindex="-1"]:focus,
+h1[tabindex="-1"]:focus {
+	outline: none;
 }
 
 @layer base {
