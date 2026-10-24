@@ -23,6 +23,7 @@
 		"db:seed": "turbo run db:seed -F @events-tracker/db --",
 		"check": "biome check --write .",
 		"db:publish": "turbo run db:publish --filter @events-tracker/db",
+		"db:migrate:remote": "turbo run db:migrate:remote -F @events-tracker/db --",
 		"env:check": "varlock load",
 		"cf:types": "wrangler types --include-runtime false"
 	},
