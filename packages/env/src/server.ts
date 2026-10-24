@@ -20,7 +20,6 @@ const read = (value: string | undefined) => (value === "" ? undefined : value);
 
 export const env = {
 	DATABASE_URL: schemaEnv.DATABASE_URL,
-	TURSO_AUTH_TOKEN: read(schemaEnv.TURSO_AUTH_TOKEN),
 	CORS_ORIGIN: schemaEnv.CORS_ORIGIN,
 	NODE_ENV: read(schemaEnv.NODE_ENV) ?? "development",
 };

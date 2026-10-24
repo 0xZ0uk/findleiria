@@ -3,21 +3,25 @@ import type { EnvSchemaAsStrings } from "../../../env";
 /**
  * Env for the auth runtime only, read from `process.env`.
  *
- * Deliberately separate from `@events-tracker/env/server`: the auth function
- * lives on Vercel and has no business requiring the events `DATABASE_URL` or
- * `CORS_ORIGIN` just to boot. Two databases, two env modules.
+ * Deliberately separate from `@events-tracker/env/server`: the Worker's auth
+ * routes have no business requiring the events `DATABASE_URL` or `CORS_ORIGIN`
+ * just to boot. Two databases, two env modules.
  *
- * Nothing is validated here. The rules (required, the 32-char secret, SMTP_*
- * required when NODE_ENV=production, URL shapes) live in the repo-root
- * `.env.schema` under `#auth`, and varlock enforces them before this code runs:
- * locally every script goes through `varlock run`, and on Vercel the build
- * command validates the project env with NODE_ENV=production. A deployment's
- * env cannot change without a new build, so the functions boot on values the
- * build already checked. `process.env` is typed from the schema (`env.d.ts`).
+ * Nothing is validated here. The rules (required, the 32-char secret, URL
+ * shapes) live in the repo-root `.env.schema` under `#auth`. Locally varlock
+ * enforces them before this code runs: every script goes through
+ * `varlock run`. In the Worker nothing validates at build time (the build and
+ * the Worker have separate environments), so the secrets are declared in
+ * `secrets.required` (wrangler.jsonc) and the Worker re-checks every value per
+ * request (`missingAuthEnv`, env-check.ts; worker/auth-guard.ts). Under
+ * `nodejs_compat` the Worker's vars and secrets are on `process.env`.
+ * The values are typed from the schema (`env.d.ts`) through `schemaEnv`:
+ * wrangler's types already declare `NodeJS.ProcessEnv`, so varlock leaves it
+ * alone.
  *
- * What stays here is what the raw environment cannot carry: the schema's
- * defaults (Vercel injects none) and the string-to-number/boolean coercion.
- * Read once at import, as before; empty strings count as unset.
+ * What stays here is what the raw environment cannot carry: the string-to-
+ * number/boolean coercion and the "empty means unset" rule. Read once at
+ * import, as before.
  */
 const schemaEnv = process.env as unknown as EnvSchemaAsStrings;
 
@@ -26,17 +30,15 @@ const read = (value: string | undefined) => (value === "" ? undefined : value);
 type NodeEnv = "development" | "production" | "test";
 
 export const authEnv = {
-	// Dev/test only: libSQL URL of the auth database (`file:...`), read by
+	// Dev/test only: `file:` URL of the auth database (a SQLite file), read by
 	// auth-db.node.ts under Bun. Production runs on the D1 `AUTH_DB` binding and
-	// never reads these two.
+	// never reads it.
 	AUTH_DATABASE_URL: read(schemaEnv.AUTH_DATABASE_URL),
-	// Only for a remote libSQL AUTH_DATABASE_URL, which is not a production path.
-	AUTH_TURSO_TOKEN: read(schemaEnv.AUTH_TURSO_TOKEN),
 	// Signs session cookies. Rotating it logs everyone out.
 	BETTER_AUTH_SECRET: schemaEnv.BETTER_AUTH_SECRET,
 	// Public origin of the app, used for callback URLs and trusted origins.
 	BETTER_AUTH_URL: schemaEnv.BETTER_AUTH_URL,
-	// Comma-separated extra origins (vercel previews, localhost ports).
+	// Comma-separated extra origins (preview deployments, localhost ports).
 	AUTH_TRUSTED_ORIGINS: read(schemaEnv.AUTH_TRUSTED_ORIGINS),
 	GOOGLE_CLIENT_ID: schemaEnv.GOOGLE_CLIENT_ID,
 	GOOGLE_CLIENT_SECRET: schemaEnv.GOOGLE_CLIENT_SECRET,

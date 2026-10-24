@@ -15,7 +15,6 @@
 	"scripts": {
 		"check-types": "tsc --noEmit",
 		"test": "bun test",
-		"db:local": "turso dev --db-file local.db",
 		"db:push": "varlock run -- drizzle-kit push",
 		"db:generate": "varlock run -- drizzle-kit generate",
 		"db:migrate:deploy": "varlock run -- drizzle-kit migrate",

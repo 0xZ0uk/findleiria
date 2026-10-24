@@ -19,7 +19,6 @@
 		"db:studio": "turbo run db:studio -F @events-tracker/db --",
 		"db:generate": "turbo run db:generate -F @events-tracker/db --",
 		"db:migrate": "turbo run db:migrate -F @events-tracker/db --",
-		"db:local": "turbo run db:local -F @events-tracker/db --",
 		"db:seed": "turbo run db:seed -F @events-tracker/db --",
 		"check": "biome check --write .",
 		"db:publish": "turbo run db:publish --filter @events-tracker/db",

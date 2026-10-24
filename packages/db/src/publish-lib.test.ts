@@ -26,7 +26,7 @@ const DAY = 86_400;
 describe("findMissingIndexes", () => {
 	const tables = ["events", "scrape_runs"];
 
-	test("reports local indexes Turso lacks", () => {
+	test("reports local indexes D1 lacks", () => {
 		const local = [
 			{ name: "events_start_idx", table: "events" },
 			{ name: "events_new_idx", table: "events" },

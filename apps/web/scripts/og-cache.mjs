@@ -4,8 +4,9 @@
 //
 // A card is keyed by a hash of exactly what shapes the image: the three strings
 // the renderer draws (title, day, venue) plus a fingerprint of the template
-// (renderer source + font files). Anything else about the event (description,
-// image, category) never reaches the PNG, so it must not invalidate the key.
+// (renderer source + font files + the site host printed on every card).
+// Anything else about the event (description, image, category) never reaches
+// the PNG, so it must not invalidate the key.
 //
 // Entries live in `<cacheDir>/<key>.png`. After each build, entries the build
 // did not use are deleted, so the directory never outgrows the live corpus.
@@ -19,10 +20,14 @@ export const OG_CACHE_VERSION = 1;
 
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-/** Hash of the files that define the card's look; any edit re-renders all. */
-export function templateFingerprint(files) {
+/**
+ * Hash of what defines the card's look; any change re-renders all. `files` are
+ * the renderer and its fonts. `host` is the site host the card prints (SITE_URL):
+ * it is part of the image, so a different host must never reuse a cached card.
+ */
+export function templateFingerprint(files, host = "") {
 	const hash = createHash("sha256");
-	hash.update(`v${OG_CACHE_VERSION}\0`);
+	hash.update(`v${OG_CACHE_VERSION}\0host:${host}\0`);
 	for (const file of files) {
 		hash.update(path.basename(file));
 		hash.update("\0");

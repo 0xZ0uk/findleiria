@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildSource, bundleNeedles, isWorkersBuild } from "./snapshot-lib.mjs";
+import {
+	buildSource,
+	bundleNeedles,
+	isWorkersBuild,
+	siteOrigin,
+} from "./snapshot-lib.mjs";
 
 const D1_ENV = {
 	CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
@@ -29,7 +34,10 @@ describe("buildSource", () => {
 
 	test("a remote SNAPSHOT_DATABASE_URL is refused", () => {
 		expect(() =>
-			buildSource({ ...D1_ENV, SNAPSHOT_DATABASE_URL: "libsql://x.turso.io" }),
+			buildSource({
+				...D1_ENV,
+				SNAPSHOT_DATABASE_URL: "libsql://db.example.invalid",
+			}),
 		).toThrow(/must be a `file:` URL/);
 	});
 
@@ -97,5 +105,43 @@ describe("isWorkersBuild", () => {
 			expect(isWorkersBuild({ WORKERS_CI: value })).toBe(false);
 		}
 		expect(isWorkersBuild({})).toBe(false);
+	});
+});
+
+describe("siteOrigin", () => {
+	test("returns the origin and host, dropping a trailing slash", () => {
+		expect(siteOrigin({ SITE_URL: "https://findleiria.pt" })).toEqual({
+			origin: "https://findleiria.pt",
+			host: "findleiria.pt",
+		});
+		expect(siteOrigin({ SITE_URL: " https://findleiria.pt/ " })).toEqual({
+			origin: "https://findleiria.pt",
+			host: "findleiria.pt",
+		});
+		expect(siteOrigin({ SITE_URL: "http://localhost:3300" })).toEqual({
+			origin: "http://localhost:3300",
+			host: "localhost:3300",
+		});
+	});
+
+	test("is required, with no default", () => {
+		expect(() => siteOrigin({})).toThrow(/^Missing SITE_URL/);
+		expect(() => siteOrigin({ SITE_URL: "  " })).toThrow(/^Missing SITE_URL/);
+	});
+
+	test("refuses anything that is not a bare http(s) origin", () => {
+		expect(() => siteOrigin({ SITE_URL: "findleiria.pt" })).toThrow(
+			/not a valid URL/,
+		);
+		expect(() => siteOrigin({ SITE_URL: "ftp://findleiria.pt" })).toThrow(
+			/must be http/,
+		);
+		for (const bad of [
+			"https://findleiria.pt/app",
+			"https://findleiria.pt/?x=1",
+			"https://findleiria.pt/#top",
+		]) {
+			expect(() => siteOrigin({ SITE_URL: bad })).toThrow(/without a path/);
+		}
 	});
 });

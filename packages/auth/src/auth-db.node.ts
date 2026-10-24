@@ -28,7 +28,7 @@ export function openAuthDb(dbSchema: typeof schema): AuthDb {
 		);
 	}
 
-	const client = createClient({ url, authToken: authEnv.AUTH_TURSO_TOKEN });
+	const client = createClient({ url });
 
 	return drizzle({ client, schema: dbSchema });
 }

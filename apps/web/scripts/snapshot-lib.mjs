@@ -100,6 +100,37 @@ export function buildSource(env = process.env) {
 	};
 }
 
+/**
+ * The public origin the prerender writes into canonical URLs, JSON-LD, the
+ * sitemap and robots.txt, and the host printed on the OG cards: SITE_URL, as
+ * `{ origin, host }`. Required, with no default: a guessed origin would ship
+ * wrong canonical URLs. It must be an origin (http or https, no path, query
+ * or hash); a trailing slash is fine.
+ */
+export function siteOrigin(env = process.env) {
+	const raw = env.SITE_URL?.trim();
+	if (!raw) {
+		throw new Error(
+			"Missing SITE_URL: the public origin of the site, e.g. https://findleiria.pt (a Workers Builds build variable, or the repo-root .env.local for a local build).",
+		);
+	}
+	let url;
+	try {
+		url = new URL(raw);
+	} catch {
+		throw new Error(`SITE_URL is not a valid URL: ${raw}`);
+	}
+	if (url.protocol !== "https:" && url.protocol !== "http:") {
+		throw new Error(`SITE_URL must be http(s), got ${url.protocol}`);
+	}
+	if (url.pathname !== "/" || url.search || url.hash) {
+		throw new Error(
+			`SITE_URL must be an origin without a path, query or hash (got ${raw}).`,
+		);
+	}
+	return { origin: url.origin, host: url.host };
+}
+
 /** Open the drizzle database a `buildSource()` names. */
 export function openSnapshotDb(builder, source) {
 	if (source.kind === "d1") {

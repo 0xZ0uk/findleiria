@@ -1,4 +1,4 @@
-# Cache headers for Workers Static Assets (the same rules the site had on Vercel).
+# Cache headers for Workers Static Assets.
 
 # Hashed build output never changes under the same name.
 /assets/*
