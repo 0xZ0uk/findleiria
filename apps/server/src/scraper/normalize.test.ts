@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	decodeEntities,
 	detectFree,
+	freeFromPrices,
 	isVagueVenue,
 	normalizeCity,
 	normalizeTitle,
@@ -267,5 +268,30 @@ describe("detectFree", () => {
 			true,
 		);
 		expect(detectFree("Estacionamento gratuito. Entrada livre.")).toBe(true);
+	});
+});
+
+describe("freeFromPrices", () => {
+	test("all-positive prices are paid, in any shape", () => {
+		expect(freeFromPrices(["12,89€", "12,00€"])).toBe(false);
+		expect(freeFromPrices([5])).toBe(false);
+		expect(freeFromPrices(["25"])).toBe(false);
+		expect(freeFromPrices(["€ 7.50"])).toBe(false);
+	});
+
+	test("all-zero prices, or a Grátis label, are free", () => {
+		expect(freeFromPrices([0])).toBe(true);
+		expect(freeFromPrices(["0"])).toBe(true);
+		expect(freeFromPrices(["0,00€"])).toBe(true);
+		expect(freeFromPrices(["Grátis"])).toBe(true);
+	});
+
+	test("no price, an unreadable one, or mixed tiers is unknown", () => {
+		expect(freeFromPrices([])).toBeNull();
+		expect(freeFromPrices([null, undefined])).toBeNull();
+		expect(freeFromPrices(["a anunciar"])).toBeNull();
+		expect(freeFromPrices(["12€", "a anunciar"])).toBeNull();
+		expect(freeFromPrices([0, 10])).toBeNull();
+		expect(freeFromPrices([-1])).toBeNull();
 	});
 });

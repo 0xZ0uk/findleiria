@@ -30,6 +30,19 @@ describe("parseFeed (offline fixture)", () => {
 		}
 	});
 
+	test("isFree: free-entry wording in the description is true, silence is null, never false", () => {
+		const events = parseFeed(fixture);
+		expect(events.filter((e) => e.isFree === true).length).toBeGreaterThan(3);
+		expect(events.filter((e) => e.isFree === null).length).toBeGreaterThan(3);
+		expect(events.some((e) => e.isFree === false)).toBe(false);
+		const exhibition = must(
+			events.find(
+				(e) => e.slug === "essa-paixao-proibida-exposicao-de-silvia-patricio",
+			),
+		);
+		expect(exhibition.isFree).toBe(true);
+	});
+
 	test("Colóquio date-from-text: 1 fevereiro => day 1, month 2, non-null epoch", () => {
 		const ev = must(
 			parseFeed(fixture).find((e) => e.slug === "coloquio-prevencao-de-quedas"),

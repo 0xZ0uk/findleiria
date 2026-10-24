@@ -2,7 +2,7 @@ import { errorMessage } from "./errors";
 import { toEpochInLisbon } from "./fingerprint";
 import { defaultFetchText } from "./http";
 import { defaultSleep } from "./lib/timing";
-import { plainText } from "./normalize";
+import { detectFree, plainText } from "./normalize";
 import type { RawEvent } from "./types";
 
 /**
@@ -263,6 +263,7 @@ export function toRawEvent(
 			categories: [],
 			imageUrl: item.imageUrl,
 			url: item.link,
+			isFree: detectFree(`${item.title}. ${item.description ?? ""}`),
 		},
 	};
 }

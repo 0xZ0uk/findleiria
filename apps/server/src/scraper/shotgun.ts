@@ -1,6 +1,7 @@
 import { defaultFetchText } from "./http";
-import { findJsonLdEvent } from "./lib/jsonld";
+import { findJsonLdEvent, offerPrices } from "./lib/jsonld";
 import { defaultSleep, randomDelay } from "./lib/timing";
+import { freeFromPrices } from "./normalize";
 import type { RawEvent } from "./types";
 
 /**
@@ -65,6 +66,7 @@ interface EventLd {
 		} | null;
 	} | null;
 	url?: string;
+	offers?: unknown;
 }
 
 /** Extract the schema.org Event/MusicEvent JSON-LD object from a detail page. */
@@ -136,6 +138,7 @@ export function toRawEvent(slug: string, ld: EventLd | null): RawEvent | null {
 		categories: [],
 		imageUrl: typeof ld.image === "string" ? ld.image : (ld.image?.url ?? null),
 		url: ld.url?.trim() || `${SITE}/en/events/${slug}`,
+		isFree: freeFromPrices(offerPrices(ld)),
 	};
 }
 

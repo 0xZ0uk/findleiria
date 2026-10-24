@@ -146,6 +146,38 @@ export function detectFree(text: string | null | undefined): boolean | null {
 	return null;
 }
 
+/**
+ * Free entry from structured prices ("12,89€", 5, "25", "Grátis"): true when
+ * every price is zero, false when every price is positive, null when there is
+ * none, one cannot be read, or free and paid tiers are mixed (we cannot say
+ * what getting in costs). The only way a source yields `false`.
+ */
+export function freeFromPrices(
+	prices: readonly (string | number | null | undefined)[],
+): boolean | null {
+	let free = 0;
+	let paid = 0;
+	for (const p of prices) {
+		if (p == null) continue;
+		let amount: number;
+		if (typeof p === "number") {
+			amount = p;
+		} else if (detectFree(p)) {
+			amount = 0;
+		} else {
+			const m = /\d+(?:[.,]\d+)?/.exec(p);
+			if (!m) return null;
+			amount = Number(m[0].replace(",", "."));
+		}
+		if (!Number.isFinite(amount) || amount < 0) return null;
+		if (amount === 0) free++;
+		else paid++;
+	}
+	if (free > 0 && paid === 0) return true;
+	if (paid > 0 && free === 0) return false;
+	return null;
+}
+
 /** Lowercase, strip diacritics (NFD), strip punctuation, collapse whitespace. */
 export function normalizeTitle(input: string): string {
 	return input

@@ -37,7 +37,8 @@ import type { RawEvent } from "./types";
  *                   and bare Lisbon wall clock on others — both shapes are
  *                   accepted, see `epochFromRaw`
  *   data-genre      slug taxonomy (`literatura`, `rock-pop`, `exposicao`, …)
- *   data-free       `1` for free entry
+ *   data-free       `1` for free entry; `0` on every other row, aggregator and
+ *                   municipal feeds included, so it only ever proves "free"
  *
  * District gate. The hub files cards by concelho, and for its own venue hubs
  * that value is a real Leiria-district concelho. Rows it picked up from
@@ -612,6 +613,9 @@ export function toRawEvent(
 		categories: categoriesFor(card.genre),
 		imageUrl: card.imageUrl ?? detail?.imageUrl ?? null,
 		url: card.url,
+		// `data-free="0"` is the default on rows nobody priced (a municipal
+		// agenda, a Bandsintown feed), not a price: it never means "paid".
+		isFree: card.free ? true : null,
 	};
 }
 

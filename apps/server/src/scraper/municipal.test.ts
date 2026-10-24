@@ -302,6 +302,26 @@ describe("toRawEvent", () => {
 		expect((raw?.endAt ?? 0) > (raw?.startAt ?? 0)).toBe(true);
 	});
 
+	test("isFree comes from the title and description wording, else null", () => {
+		const s = site("marinha-grande");
+		const url = must(parseListingItems(listing("marinha-grande"), s)[0]).url;
+		const page = parseDetail(detail("marinha-grande"));
+		const free = toRawEvent(
+			s,
+			url,
+			{ ...page, description: "Arraial com entrada livre." },
+			NOW,
+		);
+		expect(free?.isFree).toBe(true);
+		const silent = toRawEvent(
+			s,
+			url,
+			{ ...page, description: "Arraial." },
+			NOW,
+		);
+		expect(silent?.isFree).toBeNull();
+	});
+
 	test("Batalha: add-to-calendar range becomes start/end", () => {
 		const s = site("batalha");
 		const raw = toRawEvent(

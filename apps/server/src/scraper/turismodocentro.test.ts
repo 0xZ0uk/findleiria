@@ -166,6 +166,14 @@ describe("toRawEvent", () => {
 		expect(raw?.categories).toEqual([]);
 	});
 
+	test("isFree: free-entry wording is true, silence is null", () => {
+		const run = (over: Partial<TurismoItem>) =>
+			toRawEvent(item(over), counties, isLeiriaDistrict, NOW).raw?.isFree;
+		expect(run({})).toBeNull();
+		expect(run({ description: "Entrada gratuita." })).toBe(true);
+		expect(run({ title: "Mostra de Artesanato - Entrada Livre" })).toBe(true);
+	});
+
 	test("a multi-day row ends at the end of its last day", () => {
 		const { raw } = toRawEvent(
 			item({

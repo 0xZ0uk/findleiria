@@ -6,6 +6,7 @@ import {
 	isEventNode,
 	jsonLdBlocks,
 	jsonLdTypes,
+	offerPrices,
 } from "./jsonld";
 
 const page = (...blocks: unknown[]) =>
@@ -192,5 +193,25 @@ describe("findJsonLdEvent", () => {
 			{ accept: (n) => typeof n.startDate === "string" },
 		);
 		expect(byDate?.name).toBe("yes");
+	});
+});
+
+describe("offerPrices", () => {
+	test("reads a single Offer, an array of them, and an AggregateOffer's lowPrice", () => {
+		expect(offerPrices({ offers: { "@type": "Offer", price: "25" } })).toEqual([
+			"25",
+		]);
+		expect(
+			offerPrices({ offers: [{ price: 5 }, { price: 0 }, { name: "x" }] }),
+		).toEqual([5, 0]);
+		expect(
+			offerPrices({ offers: { "@type": "AggregateOffer", lowPrice: 12 } }),
+		).toEqual([12]);
+	});
+
+	test("no offers, or offers without a price, is empty", () => {
+		expect(offerPrices({})).toEqual([]);
+		expect(offerPrices({ offers: null })).toEqual([]);
+		expect(offerPrices({ offers: [{ availability: "InStock" }] })).toEqual([]);
 	});
 });

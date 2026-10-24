@@ -184,6 +184,15 @@ describe("toRawEvent (Leiria city scope)", () => {
 		expect(lisbonDay(must(raw.startAt))).toBe("2026-09-03");
 	});
 
+	test("isFree reads the detail description; the site's global tag list is not evidence", () => {
+		const card = cardById(parseListing(concertsHtml), "1732846");
+		const detail = must(parseDetail(detail3Html));
+		expect(must(toRawEvent(card, detail)).isFree).toBeNull();
+		const free = { ...detail, description: "Concerto de entrada livre." };
+		expect(must(toRawEvent(card, free)).isFree).toBe(true);
+		expect(must(toRawEvent(card, null)).isFree).toBeNull();
+	});
+
 	test("00:59 placeholder card with no detail pins to the date at 00:00", () => {
 		const card = cardById(parseListing(concertsHtml), "1732846");
 		const raw = must(toRawEvent(card, null));

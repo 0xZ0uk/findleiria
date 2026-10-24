@@ -3,7 +3,7 @@ import { toEpochInLisbonOrNull } from "./fingerprint";
 import { defaultFetchText } from "./http";
 import { foldAccents, monthFromName } from "./lib/pt-dates";
 import { defaultSleep } from "./lib/timing";
-import { plainText } from "./normalize";
+import { detectFree, plainText } from "./normalize";
 import type { RawEvent } from "./types";
 
 /**
@@ -316,6 +316,7 @@ export function toRawEvent(
 					: [],
 			imageUrl: item.imageUrl,
 			url: absolute(item.href),
+			isFree: detectFree(`${item.title}. ${item.description ?? ""}`),
 		},
 		reason: null,
 	};

@@ -5,7 +5,7 @@ import { createFetchGate } from "./lib/fetch-gate";
 import { textOf } from "./lib/html";
 import { monthFromName } from "./lib/pt-dates";
 import { defaultSleep, randomDelay } from "./lib/timing";
-import { decodeEntities } from "./normalize";
+import { decodeEntities, detectFree } from "./normalize";
 import { loadState, saveState } from "./state";
 import type { RawEvent } from "./types";
 
@@ -402,6 +402,7 @@ export function toRawEvent(
 		categories: [categoryForTitle(title)],
 		imageUrl: parsed.imageUrl,
 		url,
+		isFree: detectFree(`${title}. ${parsed.description ?? ""}`),
 	};
 }
 

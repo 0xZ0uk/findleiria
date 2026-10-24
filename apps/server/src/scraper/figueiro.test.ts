@@ -190,6 +190,14 @@ describe("toRawEvent", () => {
 		expect(raw?.city).toBe("Figueiró dos Vinhos");
 	});
 
+	test("isFree: free-entry wording is true, silence is null", () => {
+		expect(toRawEvent(item(), isLeiriaDistrict, NOW).raw?.isFree).toBeNull();
+		const free = item({ description: "Concerto com entrada livre." });
+		expect(toRawEvent(free, isLeiriaDistrict, NOW).raw?.isFree).toBe(true);
+		const titled = item({ title: "Cinema ao ar livre (grátis)" });
+		expect(toRawEvent(titled, isLeiriaDistrict, NOW).raw?.isFree).toBe(true);
+	});
+
 	test("day-precision row closes at end of its own day", () => {
 		const { raw } = toRawEvent(
 			item({ from: parseDjevDate("Sábado, 19 setembro 2026") }),

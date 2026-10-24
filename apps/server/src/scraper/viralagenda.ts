@@ -6,6 +6,7 @@ import { createFetchGate } from "./lib/fetch-gate";
 import { findJsonLdEvent } from "./lib/jsonld";
 import { ymdToEpoch } from "./lib/pt-dates";
 import { defaultSleep, randomDelay } from "./lib/timing";
+import { detectFree } from "./normalize";
 import type { RawEvent } from "./types";
 
 /**
@@ -276,10 +277,12 @@ export function toRawEvent(
 	}
 
 	const city = detail?.city ?? card.city;
+	const title = detail?.name?.trim() || card.title.trim();
+	const description = detail?.description?.trim() || null;
 	return {
-		title: detail?.name?.trim() || card.title.trim(),
+		title,
 		slug: `va-${card.id}`,
-		description: detail?.description?.trim() || null,
+		description,
 		startAt,
 		endAt,
 		dateText: null, // always a machine-readable date → no undated path
@@ -289,6 +292,7 @@ export function toRawEvent(
 		categories: card.categories,
 		imageUrl: detail?.image ?? card.imageUrl,
 		url: card.url,
+		isFree: detectFree(`${title}. ${description ?? ""}`),
 	};
 }
 
