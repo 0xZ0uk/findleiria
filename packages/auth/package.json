@@ -14,10 +14,11 @@
 		}
 	},
 	"imports": {
-		"#libsql-client": {
-			"types": "./src/libsql-client.web.ts",
-			"bun": "./src/libsql-client.node.ts",
-			"default": "./dist/libsql-client.web.js"
+		"#auth-db": {
+			"types": "./src/auth-db.types.ts",
+			"workerd": "./dist/auth-db.workerd.js",
+			"bun": "./src/auth-db.node.ts",
+			"default": "./dist/auth-db.workerd.js"
 		}
 	},
 	"scripts": {
@@ -27,6 +28,8 @@
 		"db:push": "varlock run -- drizzle-kit push",
 		"db:generate": "varlock run -- drizzle-kit generate",
 		"db:migrate": "varlock run -- drizzle-kit migrate",
+		"db:migrate:local": "wrangler d1 migrations apply findleiria-auth --local --config ../../wrangler.jsonc",
+		"db:migrate:remote": "wrangler d1 migrations apply findleiria-auth --remote --config ../../wrangler.jsonc",
 		"db:studio": "varlock run -- drizzle-kit studio",
 		"test": "bun test",
 		"check-types": "tsc --noEmit"
@@ -44,6 +47,7 @@
 		"nodemailer": "^10.2.1"
 	},
 	"devDependencies": {
+		"@cloudflare/workers-types": "^5.20261024.1",
 		"@events-tracker/config": "workspace:*",
 		"@types/bun": "catalog:",
 		"@types/nodemailer": "^8.0.2",

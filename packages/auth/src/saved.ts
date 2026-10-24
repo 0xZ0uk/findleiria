@@ -50,12 +50,16 @@ export async function saveEvent(
 	userId: string,
 	slug: string,
 ): Promise<"saved" | "limit"> {
-	const result = await authDb.run(sql`
+	// RETURNING, not a driver's affected-row count (libSQL `rowsAffected`, D1
+	// `meta.changes`): a skipped insert (cap reached, or already saved) returns
+	// no row on either.
+	const inserted = await authDb.all(sql`
 		INSERT INTO saved_event (id, user_id, event_slug, created_at)
 		SELECT ${crypto.randomUUID()}, ${userId}, ${slug}, ${Math.floor(Date.now() / 1000)}
 		WHERE (SELECT count(*) FROM saved_event WHERE user_id = ${userId}) < ${MAX_SAVED_PER_USER}
-		ON CONFLICT DO NOTHING`);
-	if (result.rowsAffected > 0) return "saved";
+		ON CONFLICT DO NOTHING
+		RETURNING id`);
+	if (inserted.length > 0) return "saved";
 
 	const existing = await authDb
 		.select({ id: savedEvent.id })

@@ -22,6 +22,7 @@ export type CoercedEnvSchema = {
   
   /**
    * **TURSO_AUTH_TOKEN** 🔐 _sensitive_  
+   * EVENTS database (not the auth database; that one is AUTH_TURSO_TOKEN).  
    * Turso READ-ONLY token. Two consumers: the web build (the token for  
    * TURSO_DATABASE_URL) and the events client when DATABASE_URL is remote. Not  
    * needed for `file:` URLs.  
@@ -98,13 +99,16 @@ export type CoercedEnvSchema = {
   
   /**
    * **AUTH_DATABASE_URL**  
-   * libSQL URL of the auth database. `file:` locally; `libsql://...` in production.  
+   * Dev/test only: libSQL URL of the auth database, a `file:` path (Bun dev server,  
+   * tests, drizzle-kit). Production runs on Cloudflare D1 through the `AUTH_DB`  
+   * binding (wrangler.jsonc), so this is neither required nor read there.  
    */
-  AUTH_DATABASE_URL: string;
+  AUTH_DATABASE_URL?: string;
   
   /**
    * **AUTH_TURSO_TOKEN** 🔐 _sensitive_  
-   * Read/write token. Only needed when AUTH_DATABASE_URL is a remote Turso database.  
+   * Dev only: token for a remote libSQL AUTH_DATABASE_URL (not the events  
+   * database, whose token is TURSO_AUTH_TOKEN). Not read in production.  
    */
   AUTH_TURSO_TOKEN?: string;
   
