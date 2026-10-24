@@ -18,6 +18,7 @@
 			"!**/.vscode",
 			"!**/routeTree.gen.ts",
 			"!env.d.ts",
+			"!worker-configuration.d.ts",
 			"!apps/web/src/env.d.ts",
 			"!**/src-tauri",
 			"!**/.nuxt",

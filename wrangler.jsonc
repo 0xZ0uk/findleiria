@@ -1,0 +1,54 @@
+// One Worker serves the whole site: the static SPA (Workers Static Assets) and
+// the same-origin API. Same origin is not a preference: cookies from a separate
+// API domain are third-party cookies, which Safari refuses, and most readers
+// arrive on an iPhone.
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "findleiria",
+	"main": "worker/index.ts",
+	// nodejs_compat gives better-auth and drizzle the Node APIs they import and
+	// fills process.env from vars/secrets. Bump the date deliberately: it pins
+	// the runtime behaviour, and `pnpm cf:types` must be re-run with it.
+	"compatibility_date": "2026-10-19",
+	"compatibility_flags": ["nodejs_compat"],
+
+	"assets": {
+		// The Vite output plus the prerendered data/, evento/ and og/ folders.
+		// The web build must have run before `wrangler dev` or `wrangler deploy`.
+		"directory": "apps/web/dist",
+		"binding": "ASSETS",
+		// The SPA picks its page from the pathname, so any path that is not a file
+		// gets the shell (index.html). This is also how an unknown /evento/<slug>
+		// shows the in-app "not found" page.
+		"not_found_handling": "single-page-application",
+		// Folder URLs: /evento/<slug> is served from evento/<slug>/index.html, and
+		// /evento/<slug>/ redirects to the slash-less form, which is the canonical
+		// URL the prerender writes into each page.
+		"html_handling": "drop-trailing-slash",
+		// Only these paths reach the Worker; everything else is answered by the
+		// assets layer without invoking it. /data/* goes through the Worker so a
+		// missing file is a real 404 and not the SPA shell.
+		"run_worker_first": ["/api/*", "/data/*"]
+	},
+
+	// Auth database (users, sessions, saved events, rate-limit rows).
+	// database_id is a placeholder until the database is created with
+	// `wrangler d1 create findleiria-auth`.
+	"d1_databases": [
+		{
+			"binding": "AUTH_DB",
+			"database_name": "findleiria-auth",
+			"database_id": "00000000-0000-0000-0000-000000000000"
+		}
+	],
+
+	// Verification mail. Sending needs a domain onboarded to Cloudflare Email.
+	"send_email": [{ "name": "EMAIL" }],
+
+	// Custom events from POST /api/track.
+	"analytics_engine_datasets": [
+		{ "binding": "ANALYTICS", "dataset": "findleiria_events" }
+	],
+
+	"observability": { "enabled": true }
+}
