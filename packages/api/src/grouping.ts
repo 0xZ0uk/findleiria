@@ -28,6 +28,9 @@ export interface MergeableEvent {
 	venueId: number | null;
 	startAt: number;
 	endAt: number | null;
+	/** Optional: when present, a later session's known value fills the merged row's blank. */
+	isFree?: boolean | null;
+	featuredAt?: number | null;
 }
 
 /**
@@ -64,6 +67,13 @@ export function mergeSameDaySessions<T extends MergeableEvent>(
 			out.push(merged);
 		} else {
 			group.starts.push(row.startAt);
+			// A free/paid flag or a pick on a later session belongs to the show.
+			if (group.row.isFree == null && row.isFree != null) {
+				group.row.isFree = row.isFree;
+			}
+			if (group.row.featuredAt == null && row.featuredAt != null) {
+				group.row.featuredAt = row.featuredAt;
+			}
 			group.row.sessionStarts = [...new Set(group.starts)].sort(
 				(a, b) => a - b,
 			);

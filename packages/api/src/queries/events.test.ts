@@ -90,10 +90,15 @@ beforeAll(async () => {
 
 	await insertEvents(db, [
 		event(1, "passado", NOW - 30 * DAY),
-		event(2, "jazz", NOW + DAY, { title: "Jazz ao Fim da Tarde" }),
+		event(2, "jazz", NOW + DAY, {
+			title: "Jazz ao Fim da Tarde",
+			is_free: true,
+		}),
 		event(3, "cinema", NOW + 3 * DAY, {
 			venue_id: 2,
 			categories: ["Cinema"],
+			is_free: false,
+			featured_at: NOW - 3600,
 		}),
 		// Two sessions of one show on the same Lisbon day: one agenda row.
 		event(4, "peca-18h", NOW + 5 * DAY, {
@@ -103,6 +108,8 @@ beforeAll(async () => {
 		event(5, "peca-21h", NOW + 5 * DAY + 3 * 3600, {
 			title: "Peça",
 			categories: ["Teatro"],
+			is_free: true,
+			featured_at: NOW - 60,
 		}),
 		// No venue at all: the join must keep the row, with null place fields.
 		event(6, "sem-sitio", NOW + 6 * DAY, {
@@ -279,6 +286,54 @@ describe("eventStats", () => {
 		} finally {
 			empty.cleanup();
 		}
+	});
+});
+
+describe("isFree and featuredAt", () => {
+	const byslug = (rows: { slug: string }[], slug: string) =>
+		rows.find((r) => r.slug === slug);
+
+	test("the agenda carries both, null when unknown or not picked", async () => {
+		const rows = await list();
+		expect(byslug(rows, "jazz")).toMatchObject({
+			isFree: true,
+			featuredAt: null,
+		});
+		expect(byslug(rows, "cinema")).toMatchObject({
+			isFree: false,
+			featuredAt: NOW - 3600,
+		});
+		expect(byslug(rows, "sem-sitio")).toMatchObject({
+			isFree: null,
+			featuredAt: null,
+		});
+	});
+
+	test("a merged show takes the flag and the pick from a later session", async () => {
+		const rows = await list();
+		expect(byslug(rows, "peca-18h")).toMatchObject({
+			isFree: true,
+			featuredAt: NOW - 60,
+		});
+		expect(byslug(rows, "peca-21h")).toBeUndefined();
+	});
+
+	test("the event page, the saved list, the directory and undated rows carry them too", async () => {
+		expect(await eventBySlug(db, "cinema")).toMatchObject({
+			isFree: false,
+			featuredAt: NOW - 3600,
+		});
+		expect(
+			byslug(await eventsBySlugs(db, ["jazz", "cinema"]), "jazz"),
+		).toMatchObject({ isFree: true, featuredAt: null });
+		expect(byslug(await eventDirectory(db), "peca-21h")).toMatchObject({
+			isFree: true,
+			featuredAt: NOW - 60,
+		});
+		expect(byslug(await undatedEvents(db), "brevemente")).toMatchObject({
+			isFree: null,
+			featuredAt: null,
+		});
 	});
 });
 
