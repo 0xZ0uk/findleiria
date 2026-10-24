@@ -88,14 +88,12 @@ export type CoercedEnvSchema = {
   SNAPSHOT_DATABASE_URL?: string;
   
   /**
-   * **VITE_UMAMI_SRC**  
-   * Cookieless Umami analytics, inlined into the browser bundle (public by  
-   * design). Both must be set to load anything; empty ships no third-party script.  
+   * **VITE_CF_BEACON_TOKEN**  
+   * Cloudflare Web Analytics site token (Web Analytics > Manage site), inlined  
+   * into the browser bundle (public by design). Also gates the custom-event  
+   * beacon to /api/track; empty ships no third-party script and sends nothing.  
    */
-  VITE_UMAMI_SRC?: string;
-  
-  /** **VITE_UMAMI_WEBSITE_ID** */
-  VITE_UMAMI_WEBSITE_ID?: string;
+  VITE_CF_BEACON_TOKEN?: string;
   
   /**
    * **R2_ACCOUNT_ID**  
@@ -194,7 +192,7 @@ export type CoercedEnvSchema = {
   
 };
 
-type _CoercedEnvSchema_c24d3c4a = CoercedEnvSchema;
+type _CoercedEnvSchema_a85e1af2 = CoercedEnvSchema;
 
 export type EnvSchemaAsStrings = {
   [Property in keyof CoercedEnvSchema]:
@@ -202,11 +200,11 @@ export type EnvSchemaAsStrings = {
       : (NonNullable<CoercedEnvSchema[Property]> extends boolean ? ('true' | 'false') : string)
 };
 
-type _EnvSchemaAsStrings_c24d3c4a = EnvSchemaAsStrings;
+type _EnvSchemaAsStrings_a85e1af2 = EnvSchemaAsStrings;
 declare global {
 
   // add types for global process.env
   namespace NodeJS {
-    interface ProcessEnv extends _EnvSchemaAsStrings_c24d3c4a {}
+    interface ProcessEnv extends _EnvSchemaAsStrings_a85e1af2 {}
   }
 }

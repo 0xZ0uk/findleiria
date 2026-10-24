@@ -485,7 +485,7 @@ describe("rate limiting", () => {
 			headers: {
 				origin: ORIGIN,
 				"content-type": "application/json",
-				"x-forwarded-for": ip,
+				"cf-connecting-ip": ip,
 			},
 			body: JSON.stringify({
 				email: "ninguem@findleiria.pt",

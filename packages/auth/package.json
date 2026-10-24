@@ -5,20 +5,22 @@
 		".": {
 			"types": "./src/index.ts",
 			"bun": "./src/index.ts",
+			"workerd": "./src/index.ts",
 			"default": "./dist/index.js"
 		},
 		"./*": {
 			"types": "./src/*.ts",
 			"bun": "./src/*.ts",
+			"workerd": "./src/*.ts",
 			"default": "./dist/*.js"
 		}
 	},
 	"imports": {
 		"#auth-db": {
 			"types": "./src/auth-db.types.ts",
-			"workerd": "./dist/auth-db.workerd.js",
+			"workerd": "./src/auth-db.workerd.ts",
 			"bun": "./src/auth-db.node.ts",
-			"default": "./dist/auth-db.workerd.js"
+			"default": "./src/auth-db.workerd.ts"
 		}
 	},
 	"scripts": {

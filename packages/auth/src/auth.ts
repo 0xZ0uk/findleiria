@@ -116,7 +116,15 @@ export function createAuth(
 		// production, like better-auth's own default: the suite signs in far
 		// faster than 3 per 10s.
 		rateLimit: { enabled: rateLimitEnabled, storage: "database" },
-		advanced: { cookiePrefix: "findleiria" },
+		advanced: {
+			cookiePrefix: "findleiria",
+			// The rate limiter keys on the client address. On Workers that is
+			// `CF-Connecting-IP`, which Cloudflare sets and overwrites on every
+			// request. `X-Forwarded-For` (better-auth's default) keeps whatever the
+			// client put in it (Cloudflare only appends), so trusting its first
+			// entry would let anyone pick their own rate-limit key.
+			ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
+		},
 		telemetry: { enabled: false },
 	});
 }

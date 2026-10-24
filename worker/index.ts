@@ -1,6 +1,8 @@
 import { authRoutes, savedRoutes } from "@events-tracker/auth";
 import { Hono } from "hono";
 
+import { trackRoutes } from "./track";
+
 /**
  * The whole site's entry point: the API plus static-asset fallthrough.
  *
@@ -18,9 +20,8 @@ const app = new Hono<{ Bindings: Env }>();
 app.route("/", authRoutes);
 app.route("/", savedRoutes);
 
-// TODO(CF-8): mount the analytics endpoint here, before the /data/* route:
-//   import { trackRoutes } from "./track";
-//   app.route("/", trackRoutes);
+// Custom analytics events (Workers Analytics Engine); see track.ts.
+app.route("/", trackRoutes);
 
 // The snapshot lives in the assets, but the assets layer answers any missing
 // path with the SPA shell (a 200 of HTML). A reader's `fetch("/data/...")`

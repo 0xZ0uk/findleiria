@@ -4,5 +4,7 @@
 		"noEmit": true,
 		"types": ["@cloudflare/workers-types"]
 	},
-	"include": ["./**/*.ts", "../worker-configuration.d.ts"]
+	"include": ["./**/*.ts", "../worker-configuration.d.ts"],
+	// Tests run on Bun (bun:test); tsconfig.test.json checks them with both type sets.
+	"exclude": ["./**/*.test.ts"]
 }
