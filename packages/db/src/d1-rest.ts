@@ -142,6 +142,52 @@ export function parseD1RawResponse(
 
 export const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 
+/** Retries after the first attempt, for the read path only. */
+export const READ_MAX_RETRIES = 3;
+/** First backoff step; each retry doubles it (500 ms, 1 s, 2 s) plus jitter. */
+export const READ_BACKOFF_BASE_MS = 500;
+/** A `Retry-After` longer than this is capped, not waited out in full. */
+export const READ_MAX_RETRY_WAIT_MS = 30_000;
+
+/** 429 (rate limited) and 5xx (D1 or the edge hiccuping) are worth another try. */
+export function isRetryableStatus(status: number): boolean {
+	return status === 429 || (status >= 500 && status <= 599);
+}
+
+/**
+ * `Retry-After` as milliseconds: delta-seconds or an HTTP date. `null` when
+ * absent or unparseable (the caller falls back to its own backoff).
+ */
+export function parseRetryAfter(
+	value: string | null,
+	now: number = Date.now(),
+): number | null {
+	const text = value?.trim();
+	if (!text) return null;
+	if (/^\d+$/.test(text)) return Number(text) * 1000;
+	const at = Date.parse(text);
+	return Number.isNaN(at) ? null : Math.max(0, at - now);
+}
+
+/**
+ * How long to wait before retry number `attempt` (0-based): `Retry-After` when
+ * the server gave one (never less than the backoff step, never more than the
+ * cap), else exponential backoff. Jitter in [0, base) is always added so
+ * parallel builds do not retry in lockstep.
+ */
+export function retryDelayMs(
+	attempt: number,
+	retryAfterMs: number | null,
+	random: () => number = Math.random,
+): number {
+	const backoff = READ_BACKOFF_BASE_MS * 2 ** attempt;
+	const wait =
+		retryAfterMs === null ? backoff : Math.max(retryAfterMs, backoff);
+	return (
+		Math.min(wait, READ_MAX_RETRY_WAIT_MS) + random() * READ_BACKOFF_BASE_MS
+	);
+}
+
 type D1ClientOptions = {
 	accountId: string;
 	databaseId: string;
@@ -150,43 +196,71 @@ type D1ClientOptions = {
 	baseUrl?: string;
 	fetch?: typeof fetch;
 	timeoutMs?: number;
+	/** For tests: replace the real wait / jitter of the read retries. */
+	sleep?: (ms: number) => Promise<void>;
+	random?: () => number;
 };
 
-/** POST `{ sql, params? }` to a database endpoint; hand back status + body. */
+/**
+ * POST `{ sql, params? }` to a database endpoint; hand back status + body.
+ *
+ * `retry` is for reads only: a 429 or 5xx is retried up to `READ_MAX_RETRIES`
+ * times with exponential backoff and jitter, honouring `Retry-After`. A write
+ * must never use it: a request that failed with a 5xx may still have been
+ * applied, and the publish's own failure handling (a clean abort that leaves
+ * the live tables alone) is the only safe answer there.
+ */
 function createPoster(
 	options: D1ClientOptions,
 	endpoint: "query" | "raw",
+	{ retry }: { retry: boolean },
 ): (
 	sql: string,
 	params?: string[],
 ) => Promise<{ status: number; body: string }> {
 	const url = `${options.baseUrl ?? CLOUDFLARE_API}/accounts/${encodeURIComponent(options.accountId)}/d1/database/${encodeURIComponent(options.databaseId)}/${endpoint}`;
 	const doFetch = options.fetch ?? fetch;
+	const sleep =
+		options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+	const maxRetries = retry ? READ_MAX_RETRIES : 0;
 	return async (sql, params) => {
-		let response: Response;
-		try {
-			response = await doFetch(url, {
-				method: "POST",
-				headers: {
-					authorization: `Bearer ${options.token}`,
-					"content-type": "application/json",
-				},
-				body: JSON.stringify(
-					params && params.length > 0 ? { sql, params } : { sql },
-				),
-				// D1 caps a request at 30 s; past that it is not coming back.
-				signal: AbortSignal.timeout(options.timeoutMs ?? 60_000),
-			});
-		} catch (err) {
-			throw new D1Error(`could not reach D1: ${String(err)}`, 0);
+		for (let attempt = 0; ; attempt++) {
+			let response: Response;
+			try {
+				response = await doFetch(url, {
+					method: "POST",
+					headers: {
+						authorization: `Bearer ${options.token}`,
+						"content-type": "application/json",
+					},
+					body: JSON.stringify(
+						params && params.length > 0 ? { sql, params } : { sql },
+					),
+					// D1 caps a request at 30 s; past that it is not coming back.
+					signal: AbortSignal.timeout(options.timeoutMs ?? 60_000),
+				});
+			} catch (err) {
+				throw new D1Error(`could not reach D1: ${String(err)}`, 0);
+			}
+			const body = await response.text();
+			if (attempt < maxRetries && isRetryableStatus(response.status)) {
+				await sleep(
+					retryDelayMs(
+						attempt,
+						parseRetryAfter(response.headers.get("retry-after")),
+						options.random,
+					),
+				);
+				continue;
+			}
+			return { status: response.status, body };
 		}
-		return { status: response.status, body: await response.text() };
 	};
 }
 
 /** A `D1Query` over the D1 REST API. */
 export function createD1Query(options: D1ClientOptions): D1Query {
-	const post = createPoster(options, "query");
+	const post = createPoster(options, "query", { retry: false });
 	return async (sql) => {
 		const { status, body } = await post(sql);
 		return parseD1Response(status, body);
@@ -202,9 +276,9 @@ export type D1RawQuery = (
 	params?: string[],
 ) => Promise<D1RawResult[]>;
 
-/** A `D1RawQuery` over the D1 REST API. */
+/** A `D1RawQuery` over the D1 REST API. Reads only: retries 429 and 5xx. */
 export function createD1Raw(options: D1ClientOptions): D1RawQuery {
-	const post = createPoster(options, "raw");
+	const post = createPoster(options, "raw", { retry: true });
 	return async (sql, params) => {
 		const { status, body } = await post(sql, params);
 		return parseD1RawResponse(status, body);

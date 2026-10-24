@@ -1,4 +1,4 @@
-/// <reference path="../../../env.d.ts" />
+import type { EnvSchemaAsStrings } from "../../../env";
 
 /**
  * Env for the auth runtime only, read from `process.env`.
@@ -19,6 +19,8 @@
  * defaults (Vercel injects none) and the string-to-number/boolean coercion.
  * Read once at import, as before; empty strings count as unset.
  */
+const schemaEnv = process.env as unknown as EnvSchemaAsStrings;
+
 const read = (value: string | undefined) => (value === "" ? undefined : value);
 
 type NodeEnv = "development" | "production" | "test";
@@ -27,22 +29,22 @@ export const authEnv = {
 	// Dev/test only: libSQL URL of the auth database (`file:...`), read by
 	// auth-db.node.ts under Bun. Production runs on the D1 `AUTH_DB` binding and
 	// never reads these two.
-	AUTH_DATABASE_URL: read(process.env.AUTH_DATABASE_URL),
+	AUTH_DATABASE_URL: read(schemaEnv.AUTH_DATABASE_URL),
 	// Only for a remote libSQL AUTH_DATABASE_URL, which is not a production path.
-	AUTH_TURSO_TOKEN: read(process.env.AUTH_TURSO_TOKEN),
+	AUTH_TURSO_TOKEN: read(schemaEnv.AUTH_TURSO_TOKEN),
 	// Signs session cookies. Rotating it logs everyone out.
-	BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
+	BETTER_AUTH_SECRET: schemaEnv.BETTER_AUTH_SECRET,
 	// Public origin of the app, used for callback URLs and trusted origins.
-	BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
+	BETTER_AUTH_URL: schemaEnv.BETTER_AUTH_URL,
 	// Comma-separated extra origins (vercel previews, localhost ports).
-	AUTH_TRUSTED_ORIGINS: read(process.env.AUTH_TRUSTED_ORIGINS),
-	GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
-	GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+	AUTH_TRUSTED_ORIGINS: read(schemaEnv.AUTH_TRUSTED_ORIGINS),
+	GOOGLE_CLIENT_ID: schemaEnv.GOOGLE_CLIENT_ID,
+	GOOGLE_CLIENT_SECRET: schemaEnv.GOOGLE_CLIENT_SECRET,
 	// Sender of the verification mail, e.g. "FindLeiria <no-reply@findleiria.pt>",
 	// on a domain onboarded to Cloudflare Email Sending. Only the Worker's mail
 	// transport reads it; the local one just prints the message.
-	MAIL_FROM: read(process.env.MAIL_FROM),
-	NODE_ENV: (read(process.env.NODE_ENV) ?? "development") as NodeEnv,
+	MAIL_FROM: read(schemaEnv.MAIL_FROM),
+	NODE_ENV: (read(schemaEnv.NODE_ENV) ?? "development") as NodeEnv,
 };
 
 /**

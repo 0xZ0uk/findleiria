@@ -2,6 +2,53 @@
 // the same-origin API. Same origin is not a preference: cookies from a separate
 // API domain are third-party cookies, which Safari refuses, and most readers
 // arrive on an iPhone.
+//
+// WORKERS BUILDS (Workers & Pages > findleiria > Settings > Build). The Worker
+// name in the dashboard must equal `name` below.
+//   Repository ............ this repo; production branch = master
+//   Root directory ........ /                    (this file lives at the root)
+//   Build command ......... pnpm cf:build        (web build + prerender + `varlock scan`)
+//   Deploy command ........ pnpm cf:deploy       (= wrangler deploy)
+//   Non-production branch
+//   deploy command ........ pnpm cf:preview      (= wrangler versions upload)
+// Workers Builds installs dependencies itself (pnpm, from the lockfile and the
+// `packageManager` field), so there is no install step. It sets WORKERS_CI=1,
+// which makes the build refuse a `file:` SNAPSHOT_DATABASE_URL.
+//
+// Two separate environments; a value set in one is NOT visible in the other.
+//
+//   BUILD variables and secrets (Settings > Build > Variables and Secrets).
+//   Read by `pnpm cf:build` only; they never reach the Worker.
+//     CLOUDFLARE_ACCOUNT_ID, EVENTS_D1_ID     plain
+//     D1_READ_API_TOKEN                       secret (READ-only D1 token)
+//     R2_ACCOUNT_ID, R2_BUILD_CACHE_BUCKET    plain
+//     R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY  secret (bucket-scoped key)
+//     VITE_CF_BEACON_TOKEN                    plain (public by design)
+//     SITE_URL                                plain (the public origin, e.g.
+//                                             https://example.pt; no trailing slash)
+//     Optional: NODE_VERSION=22 (the default image has 24; CI runs 22).
+//
+//   WORKER runtime (Settings > Variables & Secrets, or `wrangler secret put`).
+//   Read by the auth routes while serving requests; the build never sees them.
+//     secrets: BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+//              (declared in `secrets.required` below, so `wrangler deploy` and
+//              `wrangler versions upload` fail when one is missing)
+//     vars:    BETTER_AUTH_URL, MAIL_FROM, AUTH_TRUSTED_ORIGINS (optional)
+//              Not in `vars` below on purpose: the domain is not decided, and a
+//              guessed value would ship in the repo. Once it is, add:
+//                "BETTER_AUTH_URL": "https://<domain>",
+//                "MAIL_FROM": "FindLeiria <no-reply@<domain>>",
+//                "AUTH_TRUSTED_ORIGINS": "<preview origins, comma-separated>"
+//              Until then the auth routes answer 500 `server_misconfigured` and
+//              log the missing NAMES once (worker/auth-guard.ts).
+//
+// First deploy: a Worker that does not exist yet cannot have secrets set in
+// advance, and `secrets.required` makes a deploy without them fail. Do it once
+// by hand: `pnpm cf:build && pnpm exec wrangler deploy --secrets-file <file of
+// NAME=value lines>`, then connect the repo to Workers Builds.
+//
+// The deploy hook (DEPLOY_HOOK_URL) is created on the same Build settings page
+// and lives only on the cron machine; see the README.
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "findleiria",
@@ -61,6 +108,17 @@
 	"analytics_engine_datasets": [
 		{ "binding": "ANALYTICS", "dataset": "findleiria_events" }
 	],
+
+	// Secrets the Worker cannot run without. Wrangler checks them before it
+	// deploys or uploads a version (the failure names the missing ones), types
+	// them, and warns about them in `wrangler dev` (put them in .dev.vars).
+	// Values are never stored here.
+	// Side effect: `wrangler types` now declares NodeJS.ProcessEnv for these,
+	// so varlock skips its own ProcessEnv augmentation (two declarations clash);
+	// the env modules read schema-typed values through EnvSchemaAsStrings.
+	"secrets": {
+		"required": ["BETTER_AUTH_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]
+	},
 
 	"observability": { "enabled": true }
 }

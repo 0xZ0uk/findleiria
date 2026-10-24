@@ -1,6 +1,6 @@
 /**
  * The ONE daily job (C10): every source → the post-passes once → publish to
- * D1 (packages/db `db:publish`, which also asks Vercel to rebuild) → a
+ * D1 (packages/db `db:publish`, which also asks Workers Builds to rebuild) → a
  * summary. This is what cron runs:
  *
  *   pnpm --filter server daily

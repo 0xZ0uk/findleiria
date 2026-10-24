@@ -25,7 +25,10 @@
 		"db:publish": "turbo run db:publish --filter @events-tracker/db",
 		"db:migrate:remote": "turbo run db:migrate:remote -F @events-tracker/db --",
 		"env:check": "varlock load",
-		"cf:types": "wrangler types --include-runtime false"
+		"cf:types": "wrangler types --include-runtime false",
+		"cf:build": "pnpm --filter web build",
+		"cf:deploy": "wrangler deploy",
+		"cf:preview": "wrangler versions upload"
 	},
 	"dependencies": {
 		"@events-tracker/auth": "workspace:*",

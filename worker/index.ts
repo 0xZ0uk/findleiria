@@ -1,6 +1,6 @@
-import { authRoutes, savedRoutes } from "@events-tracker/auth";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 
+import { createAuthGuard } from "./auth-guard";
 import { trackRoutes } from "./track";
 
 /**
@@ -14,11 +14,22 @@ import { trackRoutes } from "./track";
  *
  * Env: Cloudflare vars and secrets are exposed on `process.env` (nodejs_compat),
  * which is where `authEnv` reads them.
+ *
+ * Auth fails closed. The auth package is loaded lazily, behind `createAuthGuard`:
+ * a deploy that lacks a required value answers these routes with a generic 500
+ * (and logs the missing names once) while the rest of the site keeps working.
  */
 const app = new Hono<{ Bindings: Env }>();
 
-app.route("/", authRoutes);
-app.route("/", savedRoutes);
+const authGuard = createAuthGuard();
+const toAuth = async (c: Context<{ Bindings: Env }>) => {
+	const { authApp } = await import("./auth-app");
+	return authApp.fetch(c.req.raw, c.env, c.executionCtx);
+};
+app.use("/api/auth/*", authGuard);
+app.use("/api/saved", authGuard);
+app.all("/api/auth/*", toAuth);
+app.all("/api/saved", toAuth);
 
 // Custom analytics events (Workers Analytics Engine); see track.ts.
 app.route("/", trackRoutes);

@@ -31,6 +31,14 @@ export async function loadSnapshotBuilder() {
 
 export const isLocalUrl = (url) => url.startsWith("file:");
 
+/**
+ * True on Cloudflare Workers Builds, which sets WORKERS_CI=1 in every build
+ * (https://developers.cloudflare.com/workers/ci-cd/builds/configuration/).
+ * Any other non-empty value counts too; "0" and "false" do not.
+ */
+export const isWorkersBuild = (env = process.env) =>
+	Boolean(env.WORKERS_CI) && !/^(0|false)$/i.test(env.WORKERS_CI);
+
 const D1_VARS = ["CLOUDFLARE_ACCOUNT_ID", "EVENTS_D1_ID", "D1_READ_API_TOKEN"];
 
 /**
@@ -40,7 +48,7 @@ const D1_VARS = ["CLOUDFLARE_ACCOUNT_ID", "EVENTS_D1_ID", "D1_READ_API_TOKEN"];
  *
  *  - `{ kind: "file", url }`: a `file:` SNAPSHOT_DATABASE_URL, a local SQLite
  *    file read through libSQL (a local build against local.db or a copy). An
- *    explicit local choice wins over D1.
+ *    explicit local choice wins over D1, except on Workers Builds (see below).
  *  - `{ kind: "d1", accountId, databaseId, token }`: the events D1 database
  *    over the REST API, with the READ-ONLY token.
  *
@@ -48,9 +56,19 @@ const D1_VARS = ["CLOUDFLARE_ACCOUNT_ID", "EVENTS_D1_ID", "D1_READ_API_TOKEN"];
  * would inline it into the bundle (the schema also marks the token
  * @sensitive, and the leak guard in prerender-events.mjs checks the bundle).
  * Anything else fails the build with a message saying what is missing.
+ *
+ * On Workers Builds (WORKERS_CI) D1 is the only source: a build there has no
+ * local.db, and a `file:` URL left in its build env would silently ship a
+ * stale or empty snapshot, so it is refused.
  */
 export function buildSource(env = process.env) {
 	const snapshotUrl = env.SNAPSHOT_DATABASE_URL;
+	if (snapshotUrl && isWorkersBuild(env)) {
+		throw new Error(
+			"SNAPSHOT_DATABASE_URL is set on Workers Builds (WORKERS_CI): refusing a local snapshot source for a deployed build. " +
+				`Remove it from the build variables; the build reads D1 (${D1_VARS.join(", ")}).`,
+		);
+	}
 	if (snapshotUrl) {
 		if (!isLocalUrl(snapshotUrl)) {
 			throw new Error(

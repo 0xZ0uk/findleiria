@@ -3,6 +3,10 @@
 // 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑 🛑
 // @ts-nocheck
 /* eslint-disable */
+
+// NOTE: the `process.env` augmentation was skipped because worker-configuration.d.ts
+// already declares NodeJS.ProcessEnv, and two declarations of it cannot both apply.
+// Use `ENV` for the full types, or set `processEnv=strict` on @generateTsTypes to override.
 export type CoercedEnvSchema = {
   /**
    * **NODE_ENV**  
@@ -81,12 +85,14 @@ export type CoercedEnvSchema = {
   D1_RW_API_TOKEN?: string;
   
   /**
-   * **VERCEL_DEPLOY_HOOK_URL** 🔐 _sensitive_  
-   * Vercel deploy hook db:publish POSTs after D1 commits, so new events reach  
-   * the static site. Without it the site keeps serving its last build. Vercel:  
-   * Project > Settings > Git > Deploy Hooks. Anyone with it can trigger builds.  
+   * **DEPLOY_HOOK_URL** 🔐 _sensitive_  
+   * Workers Builds deploy hook db:publish POSTs after D1 commits, so new events  
+   * reach the static site. Without it the site keeps serving its last build.  
+   * Workers & Pages > findleiria > Settings > Build > Deploy Hooks (the URL is  
+   * https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/<id>; it  
+   * needs no other credential). Anyone with it can trigger builds.  
    */
-  VERCEL_DEPLOY_HOOK_URL?: string;
+  DEPLOY_HOOK_URL?: string;
   
   /**
    * **SNAPSHOT_DATABASE_URL**  
@@ -188,7 +194,7 @@ export type CoercedEnvSchema = {
   
 };
 
-type _CoercedEnvSchema_397d2aa1 = CoercedEnvSchema;
+type _CoercedEnvSchema_ac5e056e = CoercedEnvSchema;
 
 export type EnvSchemaAsStrings = {
   [Property in keyof CoercedEnvSchema]:
@@ -196,11 +202,4 @@ export type EnvSchemaAsStrings = {
       : (NonNullable<CoercedEnvSchema[Property]> extends boolean ? ('true' | 'false') : string)
 };
 
-type _EnvSchemaAsStrings_397d2aa1 = EnvSchemaAsStrings;
-declare global {
-
-  // add types for global process.env
-  namespace NodeJS {
-    interface ProcessEnv extends _EnvSchemaAsStrings_397d2aa1 {}
-  }
-}
+type _EnvSchemaAsStrings_ac5e056e = EnvSchemaAsStrings;
