@@ -153,8 +153,7 @@ function pointInRing(point: Position, ring: Ring): boolean {
 		const b = ring[j] as Position;
 		const intersects =
 			a[1] > point[1] !== b[1] > point[1] &&
-			point[0] <
-				((b[0] - a[0]) * (point[1] - a[1])) / (b[1] - a[1]) + a[0];
+			point[0] < ((b[0] - a[0]) * (point[1] - a[1])) / (b[1] - a[1]) + a[0];
 		if (intersects) inside = !inside;
 	}
 	return inside;
@@ -202,7 +201,8 @@ function labelAnchor(polygons: MultiPolygon): Position {
 		cy += y;
 	}
 	const centre: Position = [cx / (outer.length - 1), cy / (outer.length - 1)];
-	if (pointInMultiPolygon(centre, polygons)) return [round(centre[0]), round(centre[1])];
+	if (pointInMultiPolygon(centre, polygons))
+		return [round(centre[0]), round(centre[1])];
 
 	const steps = 24;
 	let best: Position | null = null;
@@ -214,7 +214,10 @@ function labelAnchor(polygons: MultiPolygon): Position {
 				minY + ((maxY - minY) * j) / steps,
 			];
 			if (!pointInMultiPolygon(candidate, polygons)) continue;
-			const distance = Math.hypot(candidate[0] - centre[0], candidate[1] - centre[1]);
+			const distance = Math.hypot(
+				candidate[0] - centre[0],
+				candidate[1] - centre[1],
+			);
 			if (distance < bestDistance) {
 				bestDistance = distance;
 				best = candidate;
@@ -225,7 +228,10 @@ function labelAnchor(polygons: MultiPolygon): Position {
 	return [round(best[0]), round(best[1])];
 }
 
-function toMultiPolygon(geometry: { type: string; coordinates: unknown }): MultiPolygon {
+function toMultiPolygon(geometry: {
+	type: string;
+	coordinates: unknown;
+}): MultiPolygon {
 	if (geometry.type === "MultiPolygon") {
 		return geometry.coordinates as MultiPolygon;
 	}
@@ -248,7 +254,10 @@ function toMultiPolygon(geometry: { type: string; coordinates: unknown }): Multi
 const DISTRICT_CODE = "PT-10";
 
 function muniKey(hit: Hit): string {
-	return (hit.address?.county ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+	return (hit.address?.county ?? "")
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase();
 }
 
 function pickMunicipality(hits: Hit[], name: string): Hit {
@@ -264,14 +273,18 @@ function pickMunicipality(hits: Hit[], name: string): Hit {
 			hit.address?.["ISO3166-2-lvl6"] === DISTRICT_CODE ||
 			muniKey(hit) === "leiria",
 	);
-	const wanted = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+	const wanted = name
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase();
 	const named = (hit: Hit) =>
 		(hit.name ?? "")
 			.normalize("NFD")
 			.replace(/[\u0300-\u036f]/g, "")
 			.toLowerCase();
 	const exact = inDistrict.find((hit) => named(hit) === wanted);
-	const chosen = exact ?? inDistrict.find((hit) => hit.place_rank === 14) ?? inDistrict[0];
+	const chosen =
+		exact ?? inDistrict.find((hit) => hit.place_rank === 14) ?? inDistrict[0];
 	if (!chosen) {
 		throw new Error(
 			`no district boundary hit for ${name} (tried ${hits.length} hits: ${hits
@@ -297,7 +310,9 @@ for (const [index, name] of DISTRICT_MUNICIPALITIES.entries()) {
 	const hits = await search(`${name}, Portugal`);
 	const hit = pickMunicipality(hits, name);
 
-	const raw = toMultiPolygon(hit.geojson as { type: string; coordinates: unknown });
+	const raw = toMultiPolygon(
+		hit.geojson as { type: string; coordinates: unknown },
+	);
 	const centre: Position = [Number(hit.lon), Number(hit.lat)];
 	if (!pointInMultiPolygon(centre, raw)) {
 		throw new Error(`${name}: Nominatim centre is outside its own geometry`);
@@ -315,7 +330,8 @@ for (const [index, name] of DISTRICT_MUNICIPALITIES.entries()) {
 		if (rings.length > 0) kept.push(rings);
 	}
 	const after = kept.reduce((sum, polygon) => sum + polygon[0]!.length, 0);
-	if (kept.length === 0) throw new Error(`${name}: simplification emptied the shape`);
+	if (kept.length === 0)
+		throw new Error(`${name}: simplification emptied the shape`);
 
 	features.push({
 		type: "Feature",
@@ -323,7 +339,11 @@ for (const [index, name] of DISTRICT_MUNICIPALITIES.entries()) {
 		geometry: { type: "MultiPolygon", coordinates: kept },
 	});
 	report.push(
-		`  ${name.padEnd(22)} rings ${String(kept.length).padStart(2)}  points ${String(before).padStart(5)} → ${String(after).padStart(4)}  anchor ${labelAnchor(kept).map((n) => n.toFixed(3)).join(",")}`,
+		`  ${name.padEnd(22)} rings ${String(kept.length).padStart(2)}  points ${String(before).padStart(5)} → ${String(after).padStart(4)}  anchor ${labelAnchor(
+			kept,
+		)
+			.map((n) => n.toFixed(3))
+			.join(",")}`,
 	);
 }
 

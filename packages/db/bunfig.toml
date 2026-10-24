@@ -1,0 +1,3 @@
+# varlock is the only env loader (repo-root .env.schema, see package.json).
+# Bun's own .env autoloading would bypass the schema, so it is off.
+env = false

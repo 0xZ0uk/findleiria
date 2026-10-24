@@ -14,12 +14,12 @@
    and field labels. Color is left to the caller so the same shape can be
    amber when it marks something. */
 @utility micro {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.4;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+	font-family: var(--font-mono);
+	font-size: 11px;
+	font-weight: 500;
+	line-height: 1.4;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
 }
 
 /* The focus ring, defined once.
@@ -29,26 +29,26 @@
    whole ring out here keeps it measurable (2px, full-token color, 2px offset)
    on every control, including the ones that reset the UA outline. */
 @utility focus-ring {
-  &:focus-visible {
-    outline-color: var(--ring);
-    outline-offset: 2px;
-    outline-style: solid;
-    outline-width: 2px;
-  }
+	&:focus-visible {
+		outline-color: var(--ring);
+		outline-offset: 2px;
+		outline-style: solid;
+		outline-width: 2px;
+	}
 }
 
 @layer base {
-  /* Body carries the color tokens; html carries the overscroll gutter and the
+	/* Body carries the color tokens; html carries the overscroll gutter and the
      native-control scheme (date pickers and selects follow it). */
-  html {
-    background-color: var(--background);
-  }
+	html {
+		background-color: var(--background);
+	}
 
-  html.dark {
-    color-scheme: dark;
-  }
+	html.dark {
+		color-scheme: dark;
+	}
 
-  html.light {
-    color-scheme: light;
-  }
+	html.light {
+		color-scheme: light;
+	}
 }

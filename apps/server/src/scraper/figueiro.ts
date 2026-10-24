@@ -1,5 +1,5 @@
 import { errorMessage } from "./errors";
-import { toEpochInLisbon } from "./fingerprint";
+import { toEpochInLisbonOrNull } from "./fingerprint";
 import { defaultFetchText } from "./http";
 import { plainText } from "./normalize";
 import type { RawEvent } from "./types";
@@ -185,10 +185,16 @@ export function dateFromHref(href: string): DateParts | null {
 }
 
 const slugFromHref = (href: string): string =>
-	href.replace(/[?#].*$/, "").replace(/\/+$/, "").split("/").pop() ?? href;
+	href
+		.replace(/[?#].*$/, "")
+		.replace(/\/+$/, "")
+		.split("/")
+		.pop() ?? href;
 
 const absolute = (url: string): string =>
-	/^https?:\/\//.test(url) ? url : `${SITE}${url.startsWith("/") ? "" : "/"}${url}`;
+	/^https?:\/\//.test(url)
+		? url
+		: `${SITE}${url.startsWith("/") ? "" : "/"}${url}`;
 
 /**
  * Parse the listing HTML into items. Splitting on the item wrapper (not on a
@@ -196,9 +202,7 @@ const absolute = (url: string): string =>
  * split cannot silently re-nest a malformed row.
  */
 export function parseItems(html: string): DjevItem[] {
-	const chunks = html
-		.split(/<div[^>]*class="[^"]*\bdjev_item\b/)
-		.slice(1);
+	const chunks = html.split(/<div[^>]*class="[^"]*\bdjev_item\b/).slice(1);
 	const items: DjevItem[] = [];
 	for (const chunk of chunks) {
 		const href = firstGroup(
@@ -262,7 +266,9 @@ export function parseItems(html: string): DjevItem[] {
 	return items;
 }
 
-export type DropReason = "outOfDistrict" | "past" | "undated";
+/** `invalidDate` = the chip names a day that cannot exist (30 Feb): counted
+ * as a source failure, not a quiet drop. */
+export type DropReason = "outOfDistrict" | "past" | "undated" | "invalidDate";
 
 export interface Conversion {
 	raw: RawEvent | null;
@@ -279,33 +285,40 @@ export function toRawEvent(
 	if (!start) {
 		return { raw: null, reason: "undated" };
 	}
-	const startAt = toEpochInLisbon(
+	const startAt = toEpochInLisbonOrNull(
 		start.year,
 		start.month,
 		start.day,
 		start.hour,
 		start.minute,
 	);
-	const endOfStartDay = toEpochInLisbon(
+	const endOfStartDay = toEpochInLisbonOrNull(
 		start.year,
 		start.month,
 		start.day,
 		23,
 		59,
 	);
-	const endAt = item.to
-		? item.to.hasTime
-			? toEpochInLisbon(
+	if (startAt == null || endOfStartDay == null) {
+		return { raw: null, reason: "invalidDate" };
+	}
+	let endAt: number | null;
+	if (item.to) {
+		endAt = item.to.hasTime
+			? toEpochInLisbonOrNull(
 					item.to.year,
 					item.to.month,
 					item.to.day,
 					item.to.hour,
 					item.to.minute,
 				)
-			: toEpochInLisbon(item.to.year, item.to.month, item.to.day, 23, 59)
-		: start.hasTime
-			? null
-			: endOfStartDay;
+			: toEpochInLisbonOrNull(item.to.year, item.to.month, item.to.day, 23, 59);
+		if (endAt == null) {
+			return { raw: null, reason: "invalidDate" };
+		}
+	} else {
+		endAt = start.hasTime ? null : endOfStartDay;
+	}
 
 	const effectivelyOver = endAt ?? startAt;
 	if (effectivelyOver < now - RETRO_TOLERANCE_S) {
@@ -374,7 +387,10 @@ export async function scrape(
 		if (!raw) {
 			if (reason === "outOfDistrict") droppedOutOfDistrict++;
 			else if (reason === "past") droppedPast++;
-			else droppedUndated++;
+			else if (reason === "invalidDate") {
+				failures++;
+				firstError ??= `${item.href}: impossible date`;
+			} else droppedUndated++;
 			continue;
 		}
 		if (seenSlugs.has(raw.slug)) {

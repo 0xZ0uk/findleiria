@@ -1,5 +1,5 @@
 import { errorMessage } from "./errors";
-import { ingest, type IngestResult, type ScrapeMeta } from "./ingest";
+import { type IngestResult, ingest, type ScrapeMeta } from "./ingest";
 import type { RawEvent } from "./types";
 
 /** What a source's `scrape()` returns. */

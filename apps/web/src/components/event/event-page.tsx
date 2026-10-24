@@ -5,12 +5,13 @@ import { AgendaError } from "@/components/agenda/states";
 import { track } from "@/components/analytics";
 import { EventNotFound } from "@/components/event/not-found";
 import { SaveButton } from "@/components/saved/save-button";
-import { useDocumentMeta } from "@/hooks/use-document-meta";
+import {
+	DEFAULT_TITLE,
+	SHELL_DESCRIPTION,
+	useDocumentMeta,
+} from "@/hooks/use-document-meta";
 import { useEvent } from "@/hooks/use-event";
 import { clock, dayMonth, hasClock, weekday } from "@/utils/format";
-
-const SHELL_DESCRIPTION =
-	"Agenda de Leiria: concertos, teatro, exposições, festas e mercados do distrito, recolhidos todos os dias das fontes originais.";
 
 /** Same blocks as the article, so the swap to real content does not move the page. */
 function EventSkeleton() {
@@ -50,10 +51,14 @@ export function EventPage({ slug }: { slug: string }) {
 		() => (window.history.state as { from?: string } | null)?.from ?? "/",
 	);
 
+	// While pending, leave the head alone: a prerendered page already carries
+	// this event's title, and a generic one in between would only flicker it.
 	useDocumentMeta(
-		data
-			? `${data.title} — FindLeiria`
-			: "FindLeiria — o que se passa em Leiria",
+		event.isPending
+			? null
+			: data
+				? `${data.title} — FindLeiria`
+				: DEFAULT_TITLE,
 		data?.description ?? SHELL_DESCRIPTION,
 	);
 

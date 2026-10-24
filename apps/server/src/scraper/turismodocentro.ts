@@ -174,9 +174,7 @@ export function parseItems(text: string): TurismoItem[] {
 			link,
 			title,
 			description:
-				description.length > 0
-					? description.slice(0, DESCRIPTION_LIMIT)
-					: null,
+				description.length > 0 ? description.slice(0, DESCRIPTION_LIMIT) : null,
 			imageUrl: centro.image,
 			countyIds: asIdArray(r.county_mirror),
 			centro,

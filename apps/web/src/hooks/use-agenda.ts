@@ -4,14 +4,10 @@ import {
 	type PeriodPresetId,
 	presetRange,
 } from "@events-tracker/api/period";
+import { AGENDA_WINDOW_DAYS } from "@events-tracker/api/snapshot-shape";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-	api,
-	type PublicEvent,
-	type UndatedEvent,
-	WINDOW_LIMIT,
-} from "@/utils/api";
+import { api, type PublicEvent, type UndatedEvent } from "@/utils/api";
 import { concelhoOf } from "@/utils/concelho";
 import {
 	dayKey,
@@ -21,9 +17,11 @@ import {
 	startOfLisbonDay,
 	weekday,
 } from "@/utils/format";
+import { LOCATION_CHANGE_EVENT } from "@/utils/route";
+import { eventsInWindow } from "@/utils/snapshot";
 
-/** How far ahead the page looks. Wide enough for every date the sources publish. */
-const WINDOW_DAYS = 90;
+/** How far ahead the page looks. Shared with the snapshot that feeds it. */
+const WINDOW_DAYS = AGENDA_WINDOW_DAYS;
 
 /**
  * The agenda is one dataset with two readings: the list, and the map. The view
@@ -150,7 +148,11 @@ function filtersFromSearch(search: string): {
 	};
 }
 
-function searchFromFilters(filters: Filters, dia: string, vista: AgendaView): string {
+function searchFromFilters(
+	filters: Filters,
+	dia: string,
+	vista: AgendaView,
+): string {
 	const params = new URLSearchParams();
 	for (const key of Object.keys(URL_PARAM) as (keyof Filters)[]) {
 		const value = filters[key];
@@ -280,7 +282,11 @@ function tally(
 }
 
 /**
- * The whole page model: one window query plus browser-side facets.
+ * The whole page model: one snapshot read plus browser-side facets.
+ *
+ * The snapshot is a day old at worst and wider than the window on both sides,
+ * so the window is cut here, against this reader's clock: a show that ended
+ * yesterday is gone even though the file still carries it.
  *
  * Facets are applied over the loaded window — a couple of hundred rows — so
  * filtering is instant and the facet lists keep every option. Filtering on the
@@ -299,9 +305,8 @@ export function useAgenda() {
 		};
 	}, []);
 
-	const agendaQuery = useQuery(api.window.queryOptions(range.from, range.to));
-	const undatedQuery = useQuery(api.undated.queryOptions());
-	const statsQuery = useQuery(api.stats.queryOptions());
+	const agendaQuery = useQuery(api.agenda.queryOptions());
+	const snapshot = agendaQuery.data;
 
 	// The URL is the initial state, not a mirror of it: a shared link opens on
 	// exactly the view it was copied from.
@@ -329,7 +334,12 @@ export function useAgenda() {
 	}, [filters, dia, vista]);
 
 	const syncUrl = useCallback(
-		(next: Filters, nextDia: string, nextVista: AgendaView, mode: "push" | "replace") => {
+		(
+			next: Filters,
+			nextDia: string,
+			nextVista: AgendaView,
+			mode: "push" | "replace",
+		) => {
 			if (typeof window === "undefined") return;
 			const url = `${window.location.pathname}${searchFromFilters(next, nextDia, nextVista)}`;
 			if (mode === "push") window.history.pushState(null, "", url);
@@ -377,12 +387,20 @@ export function useAgenda() {
 			setVista(parsed.vista);
 		};
 		window.addEventListener("popstate", onPopState);
-		return () => window.removeEventListener("popstate", onPopState);
+		// A link click pushes without a popstate, e.g. Agenda from `/?concelho=X`.
+		window.addEventListener(LOCATION_CHANGE_EVENT, onPopState);
+		return () => {
+			window.removeEventListener("popstate", onPopState);
+			window.removeEventListener(LOCATION_CHANGE_EVENT, onPopState);
+		};
 	}, []);
 
 	const rows = useMemo(
-		() => (agendaQuery.data ?? []).map(toRow),
-		[agendaQuery.data],
+		() =>
+			snapshot
+				? eventsInWindow(snapshot.events, range.from, range.to).map(toRow)
+				: [],
+		[snapshot, range],
 	);
 	const needle = useMemo(
 		() => normalizeEventTitle(filters.q.trim()),
@@ -447,8 +465,8 @@ export function useAgenda() {
 	);
 
 	const announcements = useMemo(
-		() => (undatedQuery.data ?? []).map(toAnnouncement),
-		[undatedQuery.data],
+		() => (snapshot?.undated ?? []).map(toAnnouncement),
+		[snapshot],
 	);
 
 	/**
@@ -533,10 +551,10 @@ export function useAgenda() {
 			max: lastRow ? dayKey(lastRow.startAt) : range.todayKey,
 		},
 		announcements,
-		lastRunLabel: statsQuery.data?.lastRunAt
-			? lastRunLabel(statsQuery.data.lastRunAt)
+		lastRunLabel: snapshot?.stats.lastRunAt
+			? lastRunLabel(snapshot.stats.lastRunAt)
 			: null,
-		lastRunAt: statsQuery.data?.lastRunAt ?? null,
+		lastRunAt: snapshot?.stats.lastRunAt ?? null,
 		status: (agendaQuery.isPending
 			? "loading"
 			: agendaQuery.isError
@@ -544,7 +562,9 @@ export function useAgenda() {
 				: "ready") as AgendaStatus,
 		error: agendaQuery.error,
 		refetch: agendaQuery.refetch,
-		truncated: rows.length >= WINDOW_LIMIT,
+		// The build knows whether the window query hit its row cap; the rows
+		// left after the trim cannot tell.
+		truncated: snapshot?.truncated ?? false,
 	};
 }
 

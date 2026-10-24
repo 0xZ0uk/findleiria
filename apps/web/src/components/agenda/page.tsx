@@ -1,8 +1,8 @@
+import { MapView } from "@/components/map/map-view";
 import type { Agenda } from "@/hooks/use-agenda";
 import { AgendaList } from "./agenda-list";
 import { FilterBar } from "./filter-bar";
 import { Masthead } from "./masthead";
-import { MapView } from "@/components/map/map-view";
 
 /**
  * The whole product: one page, no navigation. Masthead, filters, agenda.

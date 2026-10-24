@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-
 import {
 	dayIdentityKey,
 	identityKey,
@@ -9,6 +8,7 @@ import {
 	TIME_SOURCE_PRIORITY,
 	venueCompatible,
 } from "./identity";
+import { sources } from "./index";
 
 describe("sourceTrust", () => {
 	test("municipal agenda outranks platforms; viralagenda is last", () => {
@@ -17,11 +17,29 @@ describe("sourceTrust", () => {
 		expect(sourceTrust("ticketline")).toBeLessThan(sourceTrust("viralagenda"));
 	});
 
-	test("unknown sources rank below every known source", () => {
+	test("manual (paste-a-link) ingest outranks every scraper", () => {
+		expect(sourceTrust("manual")).toBe(0);
+		expect(sourceTrust("manual")).toBeLessThan(sourceTrust("leiriagenda"));
+	});
+
+	test("viralagenda is last among known sources", () => {
+		for (const id of TIME_SOURCE_PRIORITY) {
+			if (id === "viralagenda") continue;
+			expect(sourceTrust(id)).toBeLessThan(sourceTrust("viralagenda"));
+		}
+	});
+
+	test("a truly unknown source still ranks below every known source", () => {
 		expect(sourceTrust("some-new-source")).toBe(TIME_SOURCE_PRIORITY.length);
 		expect(sourceTrust("some-new-source")).toBeGreaterThan(
 			sourceTrust("viralagenda"),
 		);
+	});
+
+	test("every registered scraper source is ranked for time trust", () => {
+		const ranked: readonly string[] = TIME_SOURCE_PRIORITY;
+		const missing = Object.keys(sources).filter((id) => !ranked.includes(id));
+		expect(missing).toEqual([]);
 	});
 });
 
@@ -444,7 +462,9 @@ describe("planComponents on Tier 1 duplicate shapes", () => {
 			},
 		]);
 		expect(comps).toHaveLength(1);
-		expect(comps[0]?.map((r) => r.id).sort((a, b) => a - b)).toEqual([390, 684]);
+		expect(comps[0]?.map((r) => r.id).sort((a, b) => a - b)).toEqual([
+			390, 684,
+		]);
 	});
 
 	test("Óbidos Vila Natal ('(vila)' placeholder vs the castle) = one component", () => {

@@ -4,22 +4,25 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev",
-		"build": "vite build && node scripts/prerender-events.mjs",
+		"dev": "varlock run -- node scripts/snapshot.mjs --soft && vite dev",
+		"snapshot": "varlock run -- node scripts/snapshot.mjs",
+		"build": "vite build && varlock run -- node scripts/prerender-events.mjs && varlock scan ./dist",
 		"concelhos:build": "bun run scripts/build-concelhos.ts",
 		"serve": "vite preview",
 		"start": "vite",
-		"check-types": "vite build && tsc --noEmit"
+		"test": "bun test",
+		"check-types": "tsc --noEmit"
+	},
+	"varlock": {
+		"loadPath": "../../",
+		"filter": "#web"
 	},
 	"dependencies": {
 		"@events-tracker/api": "workspace:*",
-		"@events-tracker/db": "workspace:*",
-		"@events-tracker/env": "workspace:*",
 		"@events-tracker/ui": "workspace:*",
 		"@tailwindcss/vite": "^4.3.3",
 		"@tanstack/react-query": "^5.101.4",
 		"better-auth": "1.7.4",
-		"dotenv": "catalog:",
 		"leaflet": "^1.9.4",
 		"lucide-react": "catalog:",
 		"react": "catalog:",
@@ -27,18 +30,19 @@
 	},
 	"devDependencies": {
 		"@events-tracker/config": "workspace:*",
-		"@libsql/client": "0.17.4",
 		"@resvg/resvg-js": "^2.6.2",
 		"@types/bun": "catalog:",
 		"@types/leaflet": "^1.9.22",
 		"@types/node": "^26.2.0",
 		"@types/react": "catalog:",
 		"@types/react-dom": "catalog:",
+		"@varlock/vite-integration": "^1.5.4",
 		"@vitejs/plugin-react": "^6.0.4",
 		"postcss": "^8.5.24",
 		"satori": "^0.33.4",
 		"tailwindcss": "catalog:",
 		"typescript": "catalog:",
+		"varlock": "^1.23.0",
 		"vite": "^8.1.5"
 	}
 }

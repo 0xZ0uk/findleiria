@@ -46,8 +46,7 @@ export function SaveButton({
 	// Signed out, the control is a route to the session page, keeping wherever
 	// the reader was so they land back here after signing in.
 	if (!saved.signedIn) {
-		const path =
-			typeof window === "undefined" ? "/" : window.location.pathname;
+		const path = typeof window === "undefined" ? "/" : window.location.pathname;
 		return (
 			<a
 				href={signInHref(path)}
@@ -60,7 +59,11 @@ export function SaveButton({
 				data-save-slug={slug}
 				className={`${baseClass} ${sizeClass} ${stateClass}`}
 			>
-				<Bookmark aria-hidden="true" strokeWidth={1.5} className="size-4 shrink-0" />
+				<Bookmark
+					aria-hidden="true"
+					strokeWidth={1.5}
+					className="size-4 shrink-0"
+				/>
 				<span className={labelClass}>Guardar</span>
 			</a>
 		);

@@ -5,6 +5,7 @@ import { lisbonDay } from "./fingerprint";
 import {
 	cityUrl,
 	districtUrl,
+	isoToEpoch,
 	type ListingCard,
 	parseDetail,
 	parseListing,
@@ -150,5 +151,35 @@ describe("scrape resilience (mock deps, offline)", () => {
 		// The card whose detail resolved gets the detail fields.
 		const merged = result.events.find((e) => e.slug === "va-1732846");
 		expect(merged?.title).toBe("#3 Fuckup Nights Leiria");
+	});
+});
+
+describe("impossible dates (S2)", () => {
+	const card = (over: Partial<ListingCard> = {}): ListingCard => ({
+		id: "999",
+		url: "https://www.viralagenda.com/pt/evento/999",
+		title: "Concerto",
+		city: "Leiria",
+		cities: ["Leiria"],
+		venue: "Teatro",
+		categories: [],
+		dateStart: "2026-02-30T21:00:00+00:00",
+		dateEnd: null,
+		hasTime: true,
+		imageUrl: null,
+		...over,
+	});
+
+	test("isoToEpoch returns null for 2026-02-30 instead of throwing", () => {
+		expect(isoToEpoch("2026-02-30")).toBeNull();
+		expect(isoToEpoch("2026-02-28")).not.toBeNull();
+	});
+
+	test("toRawEvent does not throw on an impossible card date", () => {
+		expect(() => toRawEvent(card(), null)).not.toThrow();
+		expect(
+			toRawEvent(card({ dateStart: "2026-02-30", hasTime: false }), null)
+				?.startAt,
+		).toBeNull();
 	});
 });

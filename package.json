@@ -1,39 +1,43 @@
 {
-  "name": "events-tracker",
-  "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
-  "type": "module",
-  "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "check-types": "turbo run check-types",
-    "dev:web": "turbo run dev -F web --",
-    "dev:server": "turbo run dev -F server --",
-    "db:push": "turbo run db:push -F @events-tracker/db --",
-    "db:studio": "turbo run db:studio -F @events-tracker/db --",
-    "db:generate": "turbo run db:generate -F @events-tracker/db --",
-    "db:migrate": "turbo run db:migrate -F @events-tracker/db --",
-    "db:local": "turbo run db:local -F @events-tracker/db --",
-    "db:seed": "turbo run db:seed -F @events-tracker/db --",
-    "check": "biome check --write .",
-    "db:publish": "turbo run db:publish --filter @events-tracker/db"
-  },
-  "dependencies": {
-    "@events-tracker/auth": "workspace:*",
-    "@events-tracker/env": "workspace:*",
-    "dotenv": "catalog:",
-    "hono": "catalog:",
-    "zod": "catalog:"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.5.11",
-    "@events-tracker/config": "workspace:*",
-    "@types/bun": "catalog:",
-    "turbo": "^2.10.12",
-    "typescript": "catalog:"
-  },
-  "packageManager": "pnpm@10.34.4"
+	"name": "events-tracker",
+	"private": true,
+	"workspaces": [
+		"apps/*",
+		"packages/*"
+	],
+	"type": "module",
+	"scripts": {
+		"dev": "turbo run dev",
+		"build": "turbo run build",
+		"check-types": "turbo run check-types",
+		"typecheck": "turbo run check-types",
+		"test": "turbo run test",
+		"lint": "biome ci .",
+		"dev:web": "turbo run dev -F web --",
+		"dev:server": "turbo run dev -F server --",
+		"db:push": "turbo run db:push -F @events-tracker/db --",
+		"db:studio": "turbo run db:studio -F @events-tracker/db --",
+		"db:generate": "turbo run db:generate -F @events-tracker/db --",
+		"db:migrate": "turbo run db:migrate -F @events-tracker/db --",
+		"db:local": "turbo run db:local -F @events-tracker/db --",
+		"db:seed": "turbo run db:seed -F @events-tracker/db --",
+		"check": "biome check --write .",
+		"db:publish": "turbo run db:publish --filter @events-tracker/db",
+		"env:check": "varlock load"
+	},
+	"dependencies": {
+		"@events-tracker/auth": "workspace:*",
+		"@events-tracker/env": "workspace:*",
+		"hono": "catalog:",
+		"zod": "catalog:"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.11",
+		"@events-tracker/config": "workspace:*",
+		"@types/bun": "catalog:",
+		"turbo": "^2.10.12",
+		"typescript": "catalog:",
+		"varlock": "^1.23.0"
+	},
+	"packageManager": "pnpm@10.34.4"
 }

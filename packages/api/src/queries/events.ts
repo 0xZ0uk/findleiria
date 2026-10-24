@@ -1,5 +1,4 @@
-import type { createBrowserDb } from "@events-tracker/db/browser";
-import { schema } from "@events-tracker/db/browser";
+import { type Db, schema } from "@events-tracker/db/client";
 import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 
@@ -8,13 +7,13 @@ import { mergeSameDaySessions } from "../grouping";
 /**
  * Plain (db, input) query functions — SLICE_8.
  *
- * These held the router resolvers before the frontend went serverless. Keeping
- * them in a module that never imports `@trpc/server` is what lets the SPA bundle
- * them: tRPC's server package throws on import in a browser, so a shared router
- * is not an option. The tRPC router in `../routers/events.ts` is now a thin
- * wrapper over these, so both callers run identical SQL.
+ * Two callers run identical SQL through these: the dev-only tRPC router in
+ * `../routers/events.ts` (a thin wrapper) and the build-time snapshot in
+ * `../snapshot.ts`, which turns their output into the static JSON the SPA
+ * reads. No browser code imports this module at runtime; the web app only
+ * borrows its types.
  */
-export type Db = ReturnType<typeof createBrowserDb>;
+export type { Db };
 
 const eventSelect = {
 	id: schema.events.id,

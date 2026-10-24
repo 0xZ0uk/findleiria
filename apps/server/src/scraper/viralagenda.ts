@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 import { DateTime } from "luxon";
 import { isLeiriaDistrict } from "./district";
-import { toEpochInLisbon } from "./fingerprint";
+import { toEpochInLisbonOrNull } from "./fingerprint";
 import { defaultFetchText } from "./http";
 import type { RawEvent } from "./types";
 
@@ -228,7 +228,7 @@ export function isoToEpoch(iso: string | null | undefined): number | null {
 	if (!m) {
 		return null;
 	}
-	return toEpochInLisbon(
+	return toEpochInLisbonOrNull(
 		Number.parseInt(m[1] ?? "0", 10),
 		Number.parseInt(m[2] ?? "0", 10),
 		Number.parseInt(m[3] ?? "0", 10),
@@ -241,7 +241,7 @@ function dateOnlyEpoch(iso: string): number | null {
 	if (!m) {
 		return null;
 	}
-	return toEpochInLisbon(
+	return toEpochInLisbonOrNull(
 		Number.parseInt(m[1] ?? "0", 10),
 		Number.parseInt(m[2] ?? "0", 10),
 		Number.parseInt(m[3] ?? "0", 10),
@@ -410,6 +410,13 @@ export async function scrape(
 			}
 			const raw = toRawEvent(card, detail);
 			if (raw) {
+				// A card whose date exists but resolves to nothing carries an
+				// impossible calendar date: skip just this card, count it.
+				if (raw.startAt == null && card.dateStart) {
+					failures++;
+					firstError ??= `${card.url}: impossible date "${card.dateStart}"`;
+					continue;
+				}
 				events.push(raw);
 			}
 		}

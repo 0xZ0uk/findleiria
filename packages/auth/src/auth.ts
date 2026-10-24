@@ -4,20 +4,45 @@ import { betterAuth } from "better-auth";
 import type { createAuthDb } from "./db.js";
 import { authDb } from "./db.js";
 import { authEnv, getTrustedOrigins } from "./env.js";
+import { type Mailer, sendMail } from "./mailer.js";
+import { dropStaleUnverifiedUser, googleProvesOwnership } from "./ownership.js";
 import * as schema from "./schema.js";
 
 type AuthDb = ReturnType<typeof createAuthDb>;
+
+function escapeHtml(value: string): string {
+	return value
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;");
+}
+
+/** The verification email, in pt-PT. The link is the whole point. */
+export function verificationMessage(to: string, url: string) {
+	return {
+		to,
+		subject: "Confirma o teu email — FindLeiria",
+		text: `Olá! Confirma o teu email para entrares no FindLeiria:\n\n${url}\n\nSe não foste tu, ignora esta mensagem.`,
+		html: `<p>Olá! Confirma o teu email para entrares no FindLeiria:</p><p><a href="${escapeHtml(url)}">Confirmar email</a></p><p>Se não foste tu, ignora esta mensagem.</p>`,
+	};
+}
 
 /**
  * The better-auth instance.
  *
  * Two sign-in methods, both needed: Google because most people arrive on a
- * phone where typing is the tax, email/password for the rest. No mailer is
- * wired yet, so email verification stays off and Google is the recovery path —
- * hence account linking, which lets someone who signed up with a password later
- * add Google on the same address and keep one account.
+ * phone where typing is the tax, email/password for the rest. Password accounts
+ * must confirm their email before they get a session. Whoever controls an
+ * address wins it: Google signing in on an address whose password account is
+ * unverified claims it (links, verifies, deletes the password), and an
+ * unverified account older than 24h is dropped when the address is used again.
+ * See ownership.ts. Verification mail goes through `mailer`, which tests replace.
  */
-export function createAuth(database: AuthDb = authDb) {
+export function createAuth(
+	database: AuthDb = authDb,
+	mailer: Mailer = sendMail,
+) {
 	return betterAuth({
 		appName: "FindLeiria",
 		baseURL: authEnv.BETTER_AUTH_URL,
@@ -29,7 +54,17 @@ export function createAuth(database: AuthDb = authDb) {
 			autoSignIn: true,
 			minPasswordLength: 8,
 			maxPasswordLength: 128,
-			requireEmailVerification: false,
+			// Also stops sign-up from opening a session: none until verified.
+			requireEmailVerification: true,
+		},
+		emailVerification: {
+			sendOnSignUp: true,
+			// An unverified password account that tries to sign in gets a fresh
+			// link, so accounts created before verification need no migration.
+			sendOnSignIn: true,
+			autoSignInAfterVerification: true,
+			sendVerificationEmail: ({ user, url }) =>
+				mailer(verificationMessage(user.email, url)),
 		},
 		socialProviders: {
 			google: {
@@ -49,7 +84,19 @@ export function createAuth(database: AuthDb = authDb) {
 			cookieCache: { enabled: true, maxAge: 60 },
 		},
 		account: {
-			accountLinking: { enabled: true, trustedProviders: ["google"] },
+			accountLinking: {
+				enabled: true,
+				trustedProviders: ["google"],
+				// Off so that Google can claim an address whose password account never
+				// verified. Safe only because `googleProvesOwnership` (below) then
+				// refuses anything but a Google-verified, matching email and strips
+				// the password accounts before the session exists. See ownership.ts.
+				requireLocalEmailVerified: false,
+			},
+		},
+		hooks: { before: dropStaleUnverifiedUser },
+		databaseHooks: {
+			account: { create: { before: googleProvesOwnership } },
 		},
 		advanced: { cookiePrefix: "findleiria" },
 		telemetry: { enabled: false },

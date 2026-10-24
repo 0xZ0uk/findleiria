@@ -4,7 +4,8 @@ import { useMemo } from "react";
 import { useSession } from "@/utils/auth-client";
 import { ApiError, listSaved, setSaved } from "@/utils/saved-client";
 
-const SAVED_KEY = ["saved"] as const;
+/** The slug list. Its root differs from `["saved-events", …]` on purpose. */
+const SAVED_KEY = ["saved-slugs"] as const;
 
 /**
  * The saved-events slice, driven by react-query.

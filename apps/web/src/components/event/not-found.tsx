@@ -1,8 +1,5 @@
 import { BUTTON, MICRO, SHELL } from "@/components/agenda/layout";
-import { useDocumentMeta } from "@/hooks/use-document-meta";
-
-const SHELL_DESCRIPTION =
-	"Agenda de Leiria: concertos, teatro, exposições, festas e mercados do distrito, recolhidos todos os dias das fontes originais.";
+import { SHELL_DESCRIPTION, useDocumentMeta } from "@/hooks/use-document-meta";
 
 /**
  * Shown for a slug we do not have.

@@ -5,27 +5,31 @@
 		".": {
 			"default": "./src/index.ts"
 		},
-		"./browser": {
-			"default": "./src/browser.ts"
+		"./client": {
+			"default": "./src/client.ts"
 		},
 		"./*": {
 			"default": "./src/*.ts"
 		}
 	},
 	"scripts": {
+		"check-types": "tsc --noEmit",
 		"db:local": "turso dev --db-file local.db",
-		"db:push": "drizzle-kit push",
-		"db:generate": "drizzle-kit generate",
-		"db:migrate:deploy": "drizzle-kit migrate",
-		"db:seed": "bun run src/seed.ts",
-		"db:studio": "drizzle-kit studio",
-		"db:migrate": "drizzle-kit migrate",
-		"db:publish": "bun run src/publish-turso.ts"
+		"db:push": "varlock run -- drizzle-kit push",
+		"db:generate": "varlock run -- drizzle-kit generate",
+		"db:migrate:deploy": "varlock run -- drizzle-kit migrate",
+		"db:seed": "varlock run -- bun run src/seed.ts",
+		"db:studio": "varlock run -- drizzle-kit studio",
+		"db:migrate": "varlock run -- drizzle-kit migrate",
+		"db:publish": "varlock run -- bun run src/publish-turso.ts"
+	},
+	"varlock": {
+		"loadPath": "../../",
+		"filter": "#db"
 	},
 	"dependencies": {
 		"@events-tracker/env": "workspace:*",
 		"@libsql/client": "0.17.4",
-		"dotenv": "catalog:",
 		"drizzle-orm": "^0.45.2",
 		"libsql": "catalog:",
 		"zod": "catalog:"
@@ -33,6 +37,7 @@
 	"devDependencies": {
 		"@events-tracker/config": "workspace:*",
 		"drizzle-kit": "^0.31.10",
-		"typescript": "catalog:"
+		"typescript": "catalog:",
+		"varlock": "^1.23.0"
 	}
 }

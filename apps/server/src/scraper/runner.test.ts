@@ -21,8 +21,13 @@ const rawEvent = (slug: string) =>
 		sourceId: "test",
 	}) as unknown as RawEvent;
 
-const stubIngest = (captured: ScrapeMeta[], result: Partial<IngestResult> = {}) =>
-	async (_events: RawEvent[], _source: string, meta: ScrapeMeta): Promise<IngestResult> => {
+const stubIngest =
+	(captured: ScrapeMeta[], result: Partial<IngestResult> = {}) =>
+	async (
+		_events: RawEvent[],
+		_source: string,
+		meta: ScrapeMeta,
+	): Promise<IngestResult> => {
 		captured.push(meta);
 		return {
 			itemsFound: meta.found,

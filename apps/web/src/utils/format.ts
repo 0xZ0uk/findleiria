@@ -91,7 +91,14 @@ export function shiftDayKey(key: string, days: number): string {
 /** Offset of Europe/Lisbon at an instant, in milliseconds. */
 function lisbonOffsetMs(instantMs: number): number {
 	const p = lisbonParts(instantMs);
-	const asIfUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second);
+	const asIfUtc = Date.UTC(
+		p.year,
+		p.month - 1,
+		p.day,
+		p.hour % 24,
+		p.minute,
+		p.second,
+	);
 	return asIfUtc - instantMs;
 }
 
@@ -102,7 +109,9 @@ function lisbonOffsetMs(instantMs: number): number {
  * which a UTC midnight floor would break.
  */
 export function startOfLisbonDay(nowMs: number = Date.now()): number {
-	const [y, m, d] = dayKey(Math.floor(nowMs / 1000)).split("-").map(Number);
+	const [y, m, d] = dayKey(Math.floor(nowMs / 1000))
+		.split("-")
+		.map(Number);
 	const midnightUtc = Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1);
 	return Math.floor((midnightUtc - lisbonOffsetMs(midnightUtc)) / 1000);
 }
@@ -144,7 +153,10 @@ export function hasClock(epochSeconds: number): boolean {
  * How the last collection reads: `hoje, 21:40`, `ontem, 07:00`, `9 set, 07:00`.
  * The old page claimed "atualizado diariamente · 07:00" instead of looking.
  */
-export function lastRunLabel(epochSeconds: number, nowMs: number = Date.now()): string {
+export function lastRunLabel(
+	epochSeconds: number,
+	nowMs: number = Date.now(),
+): string {
 	const today = dayKey(Math.floor(nowMs / 1000));
 	const yesterday = dayKey(Math.floor((nowMs - 86_400_000) / 1000));
 	const key = dayKey(epochSeconds);

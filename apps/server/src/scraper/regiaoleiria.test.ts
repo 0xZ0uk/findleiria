@@ -36,10 +36,10 @@ import {
 	parseLocalidade,
 	parseMonthRows,
 	parseWallClock,
+	type RegiaoState,
 	scrape,
 	slugFor,
 	toRawEvent,
-	type RegiaoState,
 } from "./regiaoleiria";
 
 /** Load the "detail" cartaz map ourselves so tests can address specific ids. */
@@ -169,9 +169,7 @@ describe("scrape — district gate is the point", () => {
 		expect(res.events.length).toBeGreaterThanOrEqual(50);
 		expect(res.droppedOutOfDistrict).toBeGreaterThan(0);
 		// Exactly one RawEvent per (post id, date).
-		const keys = res.events.map(
-			(e) => `${e.title}|${e.dateText ?? e.startAt}`,
-		);
+		const keys = res.events.map((e) => `${e.title}|${e.dateText ?? e.startAt}`);
 		expect(new Set(keys).size).toBe(keys.length);
 	});
 

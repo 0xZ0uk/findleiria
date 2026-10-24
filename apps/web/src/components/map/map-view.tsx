@@ -145,13 +145,13 @@ export function MapView({ agenda }: { agenda: Agenda }) {
 						</p>
 					</div>
 
-					<p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+					<p className="mt-2 text-[13px] text-muted-foreground leading-relaxed">
 						Cada evento conta no concelho do seu local. O mapa ignora os seus
 						próprios filtros — clicar num concelho ou num ponto muda o filtro, e
 						voltar a clicar liberta-o — para os concelhos vizinhos continuarem
 						comparáveis.
 					</p>
-					<p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+					<p className="mt-1 text-[13px] text-muted-foreground leading-relaxed">
 						Só os locais com coordenadas verificadas dentro do seu concelho são
 						pontos: {coverage.pinned} eventos desta janela
 						{coverage.settlements > 0
@@ -173,7 +173,7 @@ export function MapView({ agenda }: { agenda: Agenda }) {
 										type="button"
 										onClick={() => toggle(tally.name)}
 										aria-pressed={isSelected}
-										className={`group flex w-full items-baseline justify-between gap-3 rounded-[4px] border px-3 py-2 text-left focus-ring motion-safe:transition-colors ${
+										className={`group focus-ring flex w-full items-baseline justify-between gap-3 rounded-[4px] border px-3 py-2 text-left motion-safe:transition-colors ${
 											isSelected
 												? "border-primary bg-primary/10"
 												: "border-transparent hover:border-border hover:bg-card"
@@ -181,7 +181,7 @@ export function MapView({ agenda }: { agenda: Agenda }) {
 									>
 										<span className="min-w-0">
 											<span
-												className={`block truncate font-display text-[15px] font-bold ${
+												className={`block truncate font-bold font-display text-[15px] ${
 													isSelected ? "text-primary" : "text-foreground"
 												}`}
 											>
@@ -219,7 +219,7 @@ export function MapView({ agenda }: { agenda: Agenda }) {
 												type="button"
 												onClick={() => toggleVenue(pin.slug)}
 												aria-pressed={isSelected}
-												className={`group flex w-full items-baseline justify-between gap-3 rounded-[4px] border px-3 py-1.5 text-left focus-ring motion-safe:transition-colors ${
+												className={`group focus-ring flex w-full items-baseline justify-between gap-3 rounded-[4px] border px-3 py-1.5 text-left motion-safe:transition-colors ${
 													isSelected
 														? "border-primary bg-primary/10"
 														: "border-transparent hover:border-border hover:bg-card"
@@ -247,7 +247,7 @@ export function MapView({ agenda }: { agenda: Agenda }) {
 									);
 								})}
 							</ul>
-							<p className="mt-2 px-3 text-[13px] leading-relaxed text-muted-foreground">
+							<p className="mt-2 px-3 text-[13px] text-muted-foreground leading-relaxed">
 								{pins.length > listed.length
 									? `${listed.length} de ${pins.length} locais com coordenadas — os restantes estão no mapa e não nesta lista. O mapa desenha todos.`
 									: `${pins.length} ${pins.length === 1 ? "local" : "locais"} com coordenadas. Cada ponto é um local verificado dentro do seu concelho.`}
@@ -271,9 +271,9 @@ export function MapView({ agenda }: { agenda: Agenda }) {
 									</li>
 								))}
 							</ul>
-							<p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-								Eventos cujo local não cai em nenhum concelho do distrito. Não são
-								escondidos nem atribuídos a um concelho por adivinhação.
+							<p className="mt-2 text-[13px] text-muted-foreground leading-relaxed">
+								Eventos cujo local não cai em nenhum concelho do distrito. Não
+								são escondidos nem atribuídos a um concelho por adivinhação.
 							</p>
 						</div>
 					) : null}

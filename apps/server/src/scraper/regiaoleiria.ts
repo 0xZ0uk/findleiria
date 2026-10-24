@@ -45,7 +45,8 @@ import type { RawEvent } from "./types";
 export const BY_MONTH_BASE =
 	"https://www.regiaodeleiria.pt/wp-json/user/events/get-by-month";
 export const CART_AZ_BASE = "https://www.regiaodeleiria.pt/api/wp/v2/cartaz";
-export const LOCALIDADE_BASE = "https://www.regiaodeleiria.pt/api/wp/v2/localidade";
+export const LOCALIDADE_BASE =
+	"https://www.regiaodeleiria.pt/api/wp/v2/localidade";
 export const HORIZON_MONTHS = 6;
 export const PER_PAGE = 100;
 export const MAX_DETAIL_REQUESTS = 30;
@@ -149,9 +150,7 @@ export function parseCartaz(text: string): Map<string, CartazItem> {
 			slug: p.slug ?? "",
 			link: p.link ?? "",
 			title: decodeEntities((p.title?.rendered ?? "").trim()),
-			localidade: Array.isArray(p.localidade)
-				? p.localidade.map(Number)
-				: [],
+			localidade: Array.isArray(p.localidade) ? p.localidade.map(Number) : [],
 			tipo: decodeEntities(
 				Array.isArray(p.meta?.tipo)
 					? p.meta!.tipo!.join(" ")
@@ -200,13 +199,7 @@ export function toRawEvent(
 	let endAt: number | null = null;
 	if (clock) {
 		try {
-			startAt = toEpochInLisbon(
-				clock.y,
-				clock.m,
-				clock.d,
-				clock.h,
-				clock.min,
-			);
+			startAt = toEpochInLisbon(clock.y, clock.m, clock.d, clock.h, clock.min);
 			endAt = startAt; // single dated occurrence
 		} catch {
 			startAt = null;
@@ -419,5 +412,12 @@ export async function scrape(
 	//    CURRENT month is always refreshed regardless (see step 1).
 	deps.saveState({ monthsFetched: [...watermarked] });
 
-	return { events, failures, firstError, pagesFetched, discovered, droppedOutOfDistrict };
+	return {
+		events,
+		failures,
+		firstError,
+		pagesFetched,
+		discovered,
+		droppedOutOfDistrict,
+	};
 }

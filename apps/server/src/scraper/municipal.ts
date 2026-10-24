@@ -165,7 +165,8 @@ export interface ScrapeDeps {
 	now: number;
 }
 
-const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const defaultSleep = (ms: number) =>
+	new Promise<void>((r) => setTimeout(r, ms));
 const randomDelay = () => 350 + Math.floor(Math.random() * 300);
 
 const MONTHS: Record<string, number> = {
@@ -472,7 +473,11 @@ function widgetSpans(html: string, name: string): string[] {
 	);
 	const window = cut > 0 ? rest.slice(0, cut) : rest.slice(0, 800);
 	return [...window.matchAll(/<span[^>]*>([^<]+)<\/span>/g)]
-		.map((m) => decodeEntities(m[1] ?? "").replace(/\s+/g, " ").trim())
+		.map((m) =>
+			decodeEntities(m[1] ?? "")
+				.replace(/\s+/g, " ")
+				.trim(),
+		)
 		.filter((v) => v.length > 0);
 }
 
@@ -487,7 +492,9 @@ export function parseDetail(html: string): MunicipalDetail {
 		const byProperty = new RegExp(
 			`<meta[^>]+property="${name}"[^>]+content="([^"]*)"`,
 		).exec(html);
-		return byProperty ? decodeEntities(byProperty[1] ?? "").trim() || null : null;
+		return byProperty
+			? decodeEntities(byProperty[1] ?? "").trim() || null
+			: null;
 	};
 	const varOf = (name: string): string | null => {
 		const m = new RegExp(`class="atc_${name}"[^>]*>([^<]*)<`).exec(html);
@@ -503,8 +510,7 @@ export function parseDetail(html: string): MunicipalDetail {
 		: { earliest: null, latest: null };
 
 	return {
-		title:
-			varOf("title") ?? (h1.length > 0 ? h1 : null) ?? meta("og:title"),
+		title: varOf("title") ?? (h1.length > 0 ? h1 : null) ?? meta("og:title"),
 		atcStart: varOf("date_start"),
 		atcEnd: varOf("date_end"),
 		atcLocation: varOf("location"),
@@ -521,7 +527,8 @@ export function parseDetail(html: string): MunicipalDetail {
 }
 
 /** Values some councils leave in the venue slot when no venue was typed. */
-const VENUE_PLACEHOLDERS = /^(evento|eventos|local|local a definir|a definir|sem local|n\/a|-+)$/i;
+const VENUE_PLACEHOLDERS =
+	/^(evento|eventos|local|local a definir|a definir|sem local|n\/a|-+)$/i;
 
 export function pickVenue(
 	local: string | null,
@@ -558,7 +565,10 @@ export function toRawEvent(
 	}
 
 	let startAt = parseWallClock(detail.atcStart);
-	if (startAt != null && isDefaultEventTime(detail.atcStart, detail.publishedAt, detail.lastModified)) {
+	if (
+		startAt != null &&
+		isDefaultEventTime(detail.atcStart, detail.publishedAt, detail.lastModified)
+	) {
 		// CMS left its default (publication) time → all-day event.
 		startAt = parseWallClock(`${detail.atcStart?.slice(0, 10)} 00:00`);
 	}
@@ -575,7 +585,11 @@ export function toRawEvent(
 	}
 
 	let endAt = parseWallClock(detail.atcEnd);
-	if (endAt == null && detail.chipLatest != null && detail.chipLatest > startAt) {
+	if (
+		endAt == null &&
+		detail.chipLatest != null &&
+		detail.chipLatest > startAt
+	) {
 		// chip ranges are day-granular: keep the end at 00:00 of its day.
 		endAt = detail.chipLatest;
 	}
@@ -677,10 +691,7 @@ export async function scrape(
 				if (seen.has(item.url) || fetched.has(item.url)) {
 					continue;
 				}
-				if (
-					item.latest != null &&
-					item.latest + PAST_TOLERANCE_S < deps.now
-				) {
+				if (item.latest != null && item.latest + PAST_TOLERANCE_S < deps.now) {
 					continue; // listing already dates it in the past
 				}
 				if (detailRequests >= MAX_DETAIL_REQUESTS) {

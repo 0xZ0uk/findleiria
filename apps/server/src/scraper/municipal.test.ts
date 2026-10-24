@@ -215,7 +215,8 @@ describe("parseDetail (real detail fixtures)", () => {
 			title: "Eu Posso Correr",
 			atcStart: "2026-09-07 19:40:00",
 			atcEnd: "2026-09-21 19:40:00",
-			local: "Alvorge, Ansião, Avelar, Chão de Couce, Pousaflores e Santiago da Guarda",
+			local:
+				"Alvorge, Ansião, Avelar, Chão de Couce, Pousaflores e Santiago da Guarda",
 			cats: [],
 		},
 		{
@@ -281,7 +282,12 @@ describe("toRawEvent", () => {
 	test("Marinha Grande: dated, in-district, absolute epochs (no UTC drift)", () => {
 		const s = site("marinha-grande");
 		const items = parseListingItems(listing("marinha-grande"), s);
-		const raw = toRawEvent(s, items[0]!.url, parseDetail(detail("marinha-grande")), NOW);
+		const raw = toRawEvent(
+			s,
+			items[0]!.url,
+			parseDetail(detail("marinha-grande")),
+			NOW,
+		);
 		expect(raw?.slug).toBe(
 			"mg-10-aniversario-do-nucleo-sporting-clube-de-portugal-da-marinha-grande",
 		);
@@ -314,7 +320,12 @@ describe("toRawEvent", () => {
 	test("Ansião: undated chip + timed detail still yields a Lisbon-dated event", () => {
 		const s = site("ansiao");
 		const items = parseListingItems(listing("ansiao"), s);
-		const raw = toRawEvent(s, items[0]!.url, parseDetail(detail("ansiao")), NOW);
+		const raw = toRawEvent(
+			s,
+			items[0]!.url,
+			parseDetail(detail("ansiao")),
+			NOW,
+		);
 		expect(raw?.slug).toBe("an-refletimos-em-conjunto");
 		expect(raw?.startAt).toBe(toEpochInLisbon(2026, 9, 7, 19, 40));
 		expect(raw?.endAt).toBe(toEpochInLisbon(2026, 9, 21, 19, 40));
@@ -323,7 +334,12 @@ describe("toRawEvent", () => {
 
 	test("Alvaiázere: cross-month range keeps both ends", () => {
 		const s = site("alvaiazere");
-		const raw = toRawEvent(s, `${s.origin}/municipio/comunicacao/eventos/evento/ix`, parseDetail(detail("alvaiazere")), NOW);
+		const raw = toRawEvent(
+			s,
+			`${s.origin}/municipio/comunicacao/eventos/evento/ix`,
+			parseDetail(detail("alvaiazere")),
+			NOW,
+		);
 		expect(raw?.startAt).toBe(toEpochInLisbon(2026, 6, 1));
 		expect(raw?.endAt).toBe(toEpochInLisbon(2026, 9, 15));
 	});

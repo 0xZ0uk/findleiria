@@ -55,3 +55,20 @@ export function pathnameToRoute(pathname: string): Route {
 
 	return { kind: "notFound" };
 }
+
+/** Fired after the app pushes a new location, since `pushState` emits nothing. */
+export const LOCATION_CHANGE_EVENT = "locationchange";
+
+/**
+ * Whether following `href` would land on the page already showing.
+ *
+ * Pushing it anyway would add a history entry that goes nowhere, and would
+ * overwrite the `from` state the current entry carries.
+ */
+export function isSameLocation(
+	href: string,
+	pathname: string,
+	search: string,
+): boolean {
+	return href === `${pathname}${search}`;
+}

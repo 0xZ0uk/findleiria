@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # No varlock usage reports from CI (DO_NOT_TRACK is honored by varlock and turbo).
+  VARLOCK_TELEMETRY_DISABLED: "1"
+  DO_NOT_TRACK: "1"
+
+jobs:
+  check:
+    name: Lint, typecheck, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Third-party actions are pinned to a major version tag. Pinning to a full
+      # commit SHA is the stricter option if supply-chain hardening is wanted.
+      - uses: actions/checkout@v7
+
+      # No `version:` input: pnpm/action-setup reads it from `packageManager`.
+      - uses: pnpm/action-setup@v6
+
+      # varlock needs Node >= 22.3.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # The server, db and auth tests run on `bun test`; README asks for Bun 1.4+.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.x
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint (Biome)
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm exec turbo run check-types --concurrency=2 --ui=stream
+
+      # Tests are offline and need no .env: bunfig.toml turns Bun's env loading
+      # off and the test preloads point every database at a throwaway one.
+      - name: Test
+        run: pnpm exec turbo run test --concurrency=2 --ui=stream
+
+      # `vite build` is deliberately not run here: the web build prerenders
+      # event pages from the Turso snapshot, which needs a database and
+      # secrets that PR CI does not have. Vercel builds and deploys.

@@ -9,6 +9,7 @@ import type * as React from "react";
 
 function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
 	return (
+		// biome-ignore lint/a11y/useSemanticElements: shadcn primitive; a <fieldset> would add default browser styling to a layout wrapper
 		<div
 			data-slot="input-group"
 			role="group"
@@ -53,6 +54,8 @@ function InputGroupAddon({
 	...props
 }: React.ComponentProps<"div"> & VariantProps<typeof inputGroupAddonVariants>) {
 	return (
+		// biome-ignore lint/a11y/useSemanticElements: shadcn primitive; a <fieldset> would add default browser styling to a layout wrapper
+		// biome-ignore lint/a11y/useKeyWithClickEvents: pointer convenience that forwards focus to the sibling input; the input itself stays keyboard reachable
 		<div
 			role="group"
 			data-slot="input-group-addon"

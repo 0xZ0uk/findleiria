@@ -1,8 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
-import { districtRoster, heatOpacity, isDistrictConcelho, peak, tallyConcelhos } from "./concelho";
+import {
+	districtRoster,
+	heatOpacity,
+	isDistrictConcelho,
+	peak,
+	tallyConcelhos,
+} from "./concelho";
 
-const rows = (...cities: (string | null)[]) => cities.map((venueCity) => ({ venueCity }));
+const rows = (...cities: (string | null)[]) =>
+	cities.map((venueCity) => ({ venueCity }));
 
 describe("tallyConcelhos", () => {
 	test("folds a freguesia onto its município", () => {
@@ -11,8 +18,14 @@ describe("tallyConcelhos", () => {
 	});
 
 	test("ranks the busiest first", () => {
-		const tallies = tallyConcelhos(rows("Leiria", "Óbidos", "Leiria", "Nazaré"));
-		expect(tallies.map((tally) => tally.name)).toEqual(["Leiria", "Nazaré", "Óbidos"]);
+		const tallies = tallyConcelhos(
+			rows("Leiria", "Óbidos", "Leiria", "Nazaré"),
+		);
+		expect(tallies.map((tally) => tally.name)).toEqual([
+			"Leiria",
+			"Nazaré",
+			"Óbidos",
+		]);
 		expect(tallies[0]?.count).toBe(2);
 	});
 
@@ -23,13 +36,25 @@ describe("tallyConcelhos", () => {
 
 	test("a city outside the district is real data, not mappable, and visible", () => {
 		const tallies = tallyConcelhos(rows("Coimbra", "Leiria"));
-		expect(tallies).toContainEqual({ name: "Coimbra", count: 1, mappable: false });
-		expect(tallies).toContainEqual({ name: "Leiria", count: 1, mappable: true });
+		expect(tallies).toContainEqual({
+			name: "Coimbra",
+			count: 1,
+			mappable: false,
+		});
+		expect(tallies).toContainEqual({
+			name: "Leiria",
+			count: 1,
+			mappable: true,
+		});
 	});
 
 	test("a row with no city is counted out loud", () => {
 		const tallies = tallyConcelhos(rows(null, "", "Leiria"));
-		expect(tallies).toContainEqual({ name: "Sem concelho", count: 2, mappable: false });
+		expect(tallies).toContainEqual({
+			name: "Sem concelho",
+			count: 2,
+			mappable: false,
+		});
 	});
 
 	test("an empty window is an empty tally", () => {
@@ -79,7 +104,9 @@ describe("isDistrictConcelho", () => {
 
 describe("districtRoster", () => {
 	test("lists every concelho the map draws, busy first, empties included", () => {
-		const roster = districtRoster(tallyConcelhos(rows("Leiria", "Leiria", "Óbidos")));
+		const roster = districtRoster(
+			tallyConcelhos(rows("Leiria", "Leiria", "Óbidos")),
+		);
 		expect(roster).toHaveLength(16);
 		expect(roster[0]).toEqual({ name: "Leiria", count: 2, mappable: true });
 		expect(roster[1]).toEqual({ name: "Óbidos", count: 1, mappable: true });
@@ -88,7 +115,9 @@ describe("districtRoster", () => {
 	});
 
 	test("drops what it cannot draw and keeps the rest in step with the map", () => {
-		const roster = districtRoster(tallyConcelhos(rows("Coimbra", "Leiria", null)));
+		const roster = districtRoster(
+			tallyConcelhos(rows("Coimbra", "Leiria", null)),
+		);
 		expect(roster.some((tally) => tally.name === "Coimbra")).toBe(false);
 		expect(roster.some((tally) => tally.name === "Sem concelho")).toBe(false);
 		expect(roster.find((tally) => tally.name === "Leiria")?.count).toBe(1);

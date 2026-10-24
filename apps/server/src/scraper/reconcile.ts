@@ -56,7 +56,7 @@ export async function reconcileIdentities(): Promise<number> {
 	/** The one source item owning the row, when exactly one does. */
 	const itemKeyOf = (id: number): string | null => {
 		const items = itemsByEvent.get(id);
-		return items && items.size === 1 ? [...items][0] ?? null : null;
+		return items && items.size === 1 ? ([...items][0] ?? null) : null;
 	};
 
 	const components = planComponents(
@@ -140,7 +140,8 @@ export async function reconcileIdentities(): Promise<number> {
 				.update(schema.events)
 				.set({
 					categories: [...catSet].sort(),
-					fingerprint: fingerprint(k.title, k.venue ?? "", k.start_at),
+					// Town-qualified like ingest's (C3), from the keeper's venue.
+					fingerprint: fingerprint(k.title, k.venue ?? "", k.start_at, k.city),
 					...(end != null && end !== k.end_at ? { end_at: end } : {}),
 					updated_at: now,
 				})

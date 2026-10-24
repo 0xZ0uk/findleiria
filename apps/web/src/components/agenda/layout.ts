@@ -15,7 +15,8 @@ export const BUTTON =
 	"inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-[4px] border border-muted-foreground/60 bg-card px-4 text-[15px] font-medium text-foreground focus-ring motion-safe:transition-colors hover:border-primary/60 hover:text-primary disabled:opacity-50 sm:h-10";
 
 /** The small uppercase mono label: stat captions, chips, counts, meta. */
-export const MICRO = "font-mono text-[11px] font-medium uppercase leading-[1.4] tracking-[0.14em]";
+export const MICRO =
+	"font-mono text-[11px] font-medium uppercase leading-[1.4] tracking-[0.14em]";
 
 /**
  * The one field shape: select, date input, search.

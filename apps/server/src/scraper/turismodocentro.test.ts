@@ -4,15 +4,15 @@ import { isLeiriaDistrict } from "./district";
 import { toEpochInLisbon } from "./fingerprint";
 import {
 	COUNTY_BASE,
+	dayParts,
 	EVENT_BASE,
 	PER_PAGE,
-	dayParts,
 	parseCentro,
 	parseItems,
 	parseTerms,
 	scrape,
-	toRawEvent,
 	type TurismoItem,
+	toRawEvent,
 } from "./turismodocentro";
 
 /** 2026-09-12 12:00 UTC — the "now" every case below is judged against. */
@@ -83,7 +83,12 @@ describe("parseTerms", () => {
 describe("parseCentro", () => {
 	test("reads the mirrored date fields", () => {
 		expect(
-			parseCentro({ image: " x.jpg ", date_line: "12.09.2026", start_date: SEPT_12, end_date: SEPT_12 }),
+			parseCentro({
+				image: " x.jpg ",
+				date_line: "12.09.2026",
+				start_date: SEPT_12,
+				end_date: SEPT_12,
+			}),
 		).toEqual({
 			image: "x.jpg",
 			dateLine: "12.09.2026",
@@ -271,7 +276,12 @@ describe("scrape", () => {
 			}),
 			event({
 				id: 5,
-				centro: { image: null, date_line: null, start_date: null, end_date: null },
+				centro: {
+					image: null,
+					date_line: null,
+					start_date: null,
+					end_date: null,
+				},
 			}),
 		];
 		const urls: string[] = [];

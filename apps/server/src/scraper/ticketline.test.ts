@@ -102,6 +102,49 @@ describe("toRawEvent (Leiria city scope)", () => {
 	});
 });
 
+describe("S1 city + S2 impossible dates", () => {
+	const row = (id: string, date: string, venue = "Teatro, Leiria") =>
+		`<li itemscope itemtype="http://schema.org/Event"><a href="/evento/x-${id}" itemprop="url"></a><p itemprop="name">Show ${id}</p><span class="date" data-date="${date}"></span><p itemprop="location">${venue}</p></li>`;
+
+	test("S1: a non-Leiria in-district detail city is kept, not hardcoded", () => {
+		const rhythm = rowById(parseSearch(searchHtml, false), "106964");
+		const raw = toRawEvent(rhythm, {
+			title: "Rhythm",
+			date: "2027-04-06",
+			time: null,
+			venue: "CCC",
+			city: "Caldas da Rainha",
+			prices: [],
+		});
+		expect(raw).not.toBeNull();
+		expect(raw!.city).toBe("Caldas da Rainha");
+	});
+
+	test("S2: toEpoch returns null for 30/02 instead of throwing", () => {
+		expect(toEpoch("2026-02-30", null)).toBeNull();
+		expect(toEpoch("2026-02-28", "21:30")).not.toBeNull();
+	});
+
+	test("S2: one impossible date is skipped and counted; the rest still parse", async () => {
+		const now = () => toEpochInLisbon(2026, 9, 1);
+		const search = `<html><body><ul>${row("777001", "2026-02-30")}${row("90459", "2026-10-01")}</ul></body></html>`;
+		const result = await scrape({
+			fetchText: async (url: string) =>
+				url === SEARCH_URL
+					? search
+					: url.includes("90459")
+						? detail2Html
+						: "<html><body></body></html>",
+			sleep: async () => {},
+			now,
+			venueSearchUrl: SEARCH_URL,
+		});
+		expect(result.events.map((e) => e.slug)).toEqual(["tl-90459"]);
+		expect(result.failures).toBe(1);
+		expect(result.firstError).toContain("777001");
+	});
+});
+
 describe("scrape (mock deps, offline)", () => {
 	test("filters to future Leiria events; dead detail counted not fatal", async () => {
 		const now = () => toEpochInLisbon(2026, 9, 1); // 2026-09-01 00:00 Lisbon
