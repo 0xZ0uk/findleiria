@@ -70,3 +70,6 @@ temp
 
 # review report HTML (generated, not committed)
 .plans/*.html
+
+# Wrangler local state (D1, caches)
+.wrangler
