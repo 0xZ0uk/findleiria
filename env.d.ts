@@ -98,6 +98,24 @@ export type CoercedEnvSchema = {
   VITE_UMAMI_WEBSITE_ID?: string;
   
   /**
+   * **R2_ACCOUNT_ID**  
+   * Cloudflare account ID; the S3 endpoint is https://<id>.r2.cloudflarestorage.com.  
+   */
+  R2_ACCOUNT_ID?: string;
+  
+  /** **R2_ACCESS_KEY_ID** 🔐 _sensitive_ */
+  R2_ACCESS_KEY_ID?: string;
+  
+  /** **R2_SECRET_ACCESS_KEY** 🔐 _sensitive_ */
+  R2_SECRET_ACCESS_KEY?: string;
+  
+  /**
+   * **R2_BUILD_CACHE_BUCKET**  
+   * Bucket holding `og-cards/v<N>/<key>.png`.  
+   */
+  R2_BUILD_CACHE_BUCKET?: string;
+  
+  /**
    * **AUTH_DATABASE_URL**  
    * Dev/test only: libSQL URL of the auth database, a `file:` path (Bun dev server,  
    * tests, drizzle-kit). Production runs on Cloudflare D1 through the `AUTH_DB`  
@@ -176,7 +194,7 @@ export type CoercedEnvSchema = {
   
 };
 
-type _CoercedEnvSchema_aca46f6d = CoercedEnvSchema;
+type _CoercedEnvSchema_c24d3c4a = CoercedEnvSchema;
 
 export type EnvSchemaAsStrings = {
   [Property in keyof CoercedEnvSchema]:
@@ -184,11 +202,11 @@ export type EnvSchemaAsStrings = {
       : (NonNullable<CoercedEnvSchema[Property]> extends boolean ? ('true' | 'false') : string)
 };
 
-type _EnvSchemaAsStrings_aca46f6d = EnvSchemaAsStrings;
+type _EnvSchemaAsStrings_c24d3c4a = EnvSchemaAsStrings;
 declare global {
 
   // add types for global process.env
   namespace NodeJS {
-    interface ProcessEnv extends _EnvSchemaAsStrings_aca46f6d {}
+    interface ProcessEnv extends _EnvSchemaAsStrings_c24d3c4a {}
   }
 }

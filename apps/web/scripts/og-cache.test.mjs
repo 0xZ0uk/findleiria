@@ -8,6 +8,7 @@ import path from "node:path";
 import {
 	buildCards,
 	cardKey,
+	liveCardKeys,
 	mapPool,
 	normalizeCardInput,
 	templateFingerprint,
@@ -75,6 +76,18 @@ test("the key follows exactly the drawn text and the template", () => {
 	expect(cardKey(base, "fp2")).not.toBe(key);
 });
 
+test("liveCardKeys lists each distinct key once", () => {
+	const same = { title: "Mesmo", dayLabel: "1 jan 2027", venueLabel: "Sala" };
+	const keys = liveCardKeys(
+		[event("a", same), event("b", same), event("c")],
+		"fp1",
+	);
+	expect(keys).toEqual([
+		cardKey(event("a", same), "fp1"),
+		cardKey(event("c"), "fp1"),
+	]);
+});
+
 test("the template fingerprint changes when a template file does", () => {
 	const file = path.join(root, "template.mjs");
 	fs.mkdirSync(root, { recursive: true });
@@ -89,7 +102,16 @@ test("a cold build creates the cache and renders every card", async () => {
 	const { calls, render } = counting();
 	const stats = await run([event("a"), event("b")], render);
 
-	expect(stats).toEqual({ cards: 2, rendered: 2, reused: 0, evicted: 0 });
+	expect(stats).toMatchObject({
+		cards: 2,
+		rendered: 2,
+		reused: 0,
+		evicted: 0,
+	});
+	// The rendered keys are the live keys: what a remote store must be given.
+	expect(stats.renderedKeys.sort()).toEqual(
+		liveCardKeys([event("a"), event("b")], "fp1").sort(),
+	);
 	expect(calls).toHaveLength(2);
 	expect(fs.readdirSync(outDir).sort()).toEqual(["a.png", "b.png"]);
 	expect(fs.readdirSync(cacheDir)).toHaveLength(2);
@@ -105,6 +127,9 @@ test("a warm build reuses unchanged cards and renders only the changed one", asy
 	);
 
 	expect(stats).toMatchObject({ rendered: 1, reused: 1, evicted: 1 });
+	expect(stats.renderedKeys).toEqual([
+		cardKey(event("b", { title: "Título novo" }), "fp1"),
+	]);
 	expect(calls.map((c) => c.title)).toEqual(["Título novo"]);
 	// The reused card is byte-identical to what the cold build wrote.
 	expect(fs.readFileSync(path.join(outDir, "a.png"))).toEqual(
@@ -130,7 +155,12 @@ test("a template change re-renders everything and evicts the old cards", async (
 	const { calls, render } = counting();
 	const stats = await run([event("a"), event("b")], render, "fp2");
 
-	expect(stats).toEqual({ cards: 2, rendered: 2, reused: 0, evicted: 2 });
+	expect(stats).toMatchObject({
+		cards: 2,
+		rendered: 2,
+		reused: 0,
+		evicted: 2,
+	});
 	expect(calls).toHaveLength(2);
 });
 

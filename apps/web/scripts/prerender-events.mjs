@@ -9,8 +9,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { buildCards, templateFingerprint } from "./og-cache.mjs";
+import { buildCards, liveCardKeys, templateFingerprint } from "./og-cache.mjs";
 import { OG_TEMPLATE_FILES, renderOgCard } from "./og-card.mjs";
+import { createR2Cache, formatR2Stats } from "./og-r2.mjs";
 import {
 	APP_DIR,
 	buildCredentials,
@@ -22,10 +23,10 @@ const DIST = path.join(APP_DIR, "dist");
 const DATA = path.join(DIST, "data");
 const SITE = "https://findleiria.vercel.app";
 const LISBON_TZ = "Europe/Lisbon";
-// Rendered OG cards, keyed by content (see og-cache.mjs). Lives under
-// node_modules because Vercel restores node_modules/** between builds (the
-// build cache is per project and git branch, retained one month); a missing or
-// empty directory is simply a cold build that renders every card.
+// Rendered OG cards, keyed by content (see og-cache.mjs). Between builds they
+// persist in an R2 bucket (og-r2.mjs); this directory is the local working copy
+// (under node_modules, which Vercel also restores). A missing or empty
+// directory with no R2 config is simply a cold build that renders every card.
 const OG_CACHE_DIR = path.join(APP_DIR, "node_modules", ".cache", "og-cards");
 const OG_CONCURRENCY = 4;
 
@@ -357,14 +358,23 @@ async function main() {
 	if (cardEntries.some((entry) => !entry.slug)) {
 		throw new Error("Row with empty slug encountered.");
 	}
+	const fingerprint = templateFingerprint(OG_TEMPLATE_FILES);
+	const liveKeys = liveCardKeys(cardEntries, fingerprint);
+	// Remote cache: fetch what this build needs, render the rest, then upload the
+	// new cards and drop the unused ones. Never fails the build (og-r2.mjs).
+	const r2 = createR2Cache({ cacheDir: OG_CACHE_DIR });
+	await r2.pull(liveKeys);
 	const cardStats = await buildCards({
 		entries: cardEntries,
 		cacheDir: OG_CACHE_DIR,
 		outDir: path.join(DIST, "og"),
-		fingerprint: templateFingerprint(OG_TEMPLATE_FILES),
+		fingerprint,
 		render: renderOgCard,
 		concurrency: OG_CONCURRENCY,
 	});
+	await r2.push(cardStats.renderedKeys);
+	await r2.prune(liveKeys);
+	if (r2.enabled) console.log(formatR2Stats(r2.stats));
 	console.log(
 		`[prerender] og cards: ${cardStats.rendered} rendered, ${cardStats.reused} from cache, ${cardStats.evicted} evicted`,
 	);
