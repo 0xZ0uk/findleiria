@@ -1,49 +1,43 @@
 /* ============================================================
-   Porta443 mechanism layer for findleiria (redesign/p443-brand).
-   The tokens are defined here; DESIGN.md at the repo root describes them.
-   Single chromatic driver: amber #FF8C00. Sharp corners 0–4px.
-   Schibsted Grotesk (display) / Karla (body). Dark-first.
+   FindLeiria tokens. DESIGN.md at the repo root describes them.
+   One light theme: white ground, forest green for action and state,
+   five pastels for event themes. Fraunces (serif headings) / Inter (body).
    NOTE: fonts are self-hosted via @font-face in apps/web/src/index.css
    (a @import here would be non-consecutive after the tailwind base layer).
    ============================================================ */
 
+/* ── Primitives: named by hue, never used in a component ── */
 :root {
-	/* ── Porta443 core palette ── */
-	--p443-primary: #ff8c00; /* amber — the only colour */
-	--p443-on-primary: #1a1a1a; /* near-black on amber fills */
-	--p443-primary-hover: #ffa133;
-	--p443-ink: #e5e5e5; /* body/headings on dark */
-	--p443-ink-muted: #a3a3a3;
-	--p443-canvas: #0a0a0a; /* dark ground (default) */
-	--p443-surface: #141414; /* cards, sections, inputs */
-	--p443-hairline: #2a2a2a; /* derived neutral — DESIGN.md Known Gaps */
-	--p443-light-canvas: #ffffff; /* light mode ground (inversion) */
-	--p443-light-surface: #fafafa;
-	--p443-light-ink: #1a1a1a;
-	--p443-light-ink-muted: #525252;
+	--fl-white: #ffffff;
+	--fl-paper: #fbfaf6;
+	--fl-ink-900: #17221b;
+	--fl-ink-600: #4f5b54; /* 7.1:1 on white, 6.8:1 on paper */
+	--fl-ink-500: #6b756f; /* 4.8:1 on white */
+	--fl-ink-400: #838c86; /* 3.5:1 on white: control edges */
+	--fl-ink-100: #e4e7e2;
 
-	/* Radii — sharp geometry (doorway logo) */
-	--p443-r-none: 0px;
-	--p443-r-sm: 2px;
-	--p443-r-md: 4px;
+	--fl-forest-900: #163a28;
+	--fl-forest-800: #1f4a34; /* 10.1:1 with white */
+	--fl-forest-200: #cfe5d7; /* 7.6:1 on forest-800 */
+	--fl-forest-100: #d8efe0; /* forest-800 on it: 8.3:1 */
 
-	/* Spacing */
-	--p443-space-xs: 8px;
-	--p443-space-sm: 12px;
-	--p443-space-md: 16px;
-	--p443-space-lg: 24px;
-	--p443-space-xl: 32px;
-	--p443-space-xxl: 48px;
+	--fl-red-700: #b42318;
 
-	--p443-font-display: "Schibsted Grotesk", sans-serif;
-	--p443-font-body: "Karla", sans-serif;
-	--p443-font-mono: "JetBrains Mono", "IBM Plex Mono", Menlo, monospace;
+	--fl-lilac-100: #e7defe;
+	--fl-lilac-800: #43308a; /* 8.0:1 on lilac-100 */
+	--fl-pink-100: #ffdbe5;
+	--fl-pink-800: #8a2747; /* 6.7:1 */
+	--fl-sky-100: #d3e8ff;
+	--fl-sky-800: #1f4c80; /* 7.0:1 */
+	--fl-peach-100: #ffe1c7;
+	--fl-peach-800: #7f3f12; /* 6.4:1 */
+	--fl-butter-100: #fff0b3;
+	--fl-butter-800: #6b5200; /* 6.5:1 */
 }
 
 @theme inline {
-	--font-sans: "Karla", system-ui, sans-serif;
-	--font-display: "Schibsted Grotesk", sans-serif;
-	--font-mono: "JetBrains Mono", "IBM Plex Mono", Menlo, monospace;
+	--font-sans: "Inter", system-ui, sans-serif;
+	--font-serif: "Fraunces", Georgia, serif;
 
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);
@@ -53,6 +47,9 @@
 	--color-popover-foreground: var(--popover-foreground);
 	--color-primary: var(--primary);
 	--color-primary-foreground: var(--primary-foreground);
+	--color-primary-hover: var(--primary-hover);
+	--color-primary-surface: var(--primary-surface);
+	--color-primary-foreground-muted: var(--primary-foreground-muted);
 	--color-secondary: var(--secondary);
 	--color-secondary-foreground: var(--secondary-foreground);
 	--color-muted: var(--muted);
@@ -63,48 +60,64 @@
 	--color-border: var(--border);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
+	--color-control: var(--control);
+	--color-placeholder: var(--placeholder);
+
+	--color-theme-music: var(--theme-music);
+	--color-theme-music-foreground: var(--theme-music-foreground);
+	--color-theme-stage: var(--theme-stage);
+	--color-theme-stage-foreground: var(--theme-stage-foreground);
+	--color-theme-arts: var(--theme-arts);
+	--color-theme-arts-foreground: var(--theme-arts-foreground);
+	--color-theme-food: var(--theme-food);
+	--color-theme-food-foreground: var(--theme-food-foreground);
+	--color-theme-outdoors: var(--theme-outdoors);
+	--color-theme-outdoors-foreground: var(--theme-outdoors-foreground);
 }
 
-/* ── shadcn token map → Porta443 (default = dark canvas; `.dark` is the
-   same dark set, and `.light` carries the inversion below) ── */
-:root,
-.dark {
-	--background: var(--p443-canvas);
-	--foreground: var(--p443-ink);
-	--card: var(--p443-surface);
-	--card-foreground: var(--p443-ink);
-	--popover: var(--p443-surface);
-	--popover-foreground: var(--p443-ink);
-	--primary: var(--p443-primary);
-	--primary-foreground: var(--p443-on-primary);
-	--secondary: var(--p443-surface);
-	--secondary-foreground: var(--p443-ink-muted);
-	--muted: var(--p443-surface);
-	--muted-foreground: var(--p443-ink-muted);
-	--accent: var(--p443-surface);
-	--accent-foreground: var(--p443-ink);
-	--destructive: #d0342c;
-	--border: var(--p443-hairline);
-	--input: var(--p443-hairline);
-	--ring: var(--p443-primary);
-	--radius: 4px;
-}
+/* ── Semantic tokens: the only tier components read ── */
+:root {
+	--background: var(--fl-white);
+	--foreground: var(--fl-ink-900);
+	--card: var(--fl-paper);
+	--card-foreground: var(--fl-ink-900);
+	--popover: var(--fl-white);
+	--popover-foreground: var(--fl-ink-900);
+	/* Action and state. One filled control per view. */
+	--primary: var(--fl-forest-800);
+	--primary-foreground: var(--fl-white);
+	--primary-hover: var(--fl-forest-900);
+	/* "Today" and selected-but-quiet states. */
+	--primary-surface: var(--fl-forest-100);
+	/* Secondary text sitting on a primary fill. */
+	--primary-foreground-muted: var(--fl-forest-200);
+	--secondary: var(--fl-paper);
+	--secondary-foreground: var(--fl-ink-600);
+	--muted: var(--fl-paper);
+	--muted-foreground: var(--fl-ink-600);
+	--accent: var(--fl-forest-100);
+	--accent-foreground: var(--fl-forest-800);
+	--destructive: var(--fl-red-700);
+	/* Structure: rules, card edges. */
+	--border: var(--fl-ink-100);
+	/* A control's own edge has to clear 3:1 (WCAG 1.4.11). */
+	--input: var(--fl-ink-400);
+	--control: var(--fl-ink-400);
+	--placeholder: var(--fl-ink-500);
+	--ring: var(--fl-forest-800);
+	--radius: 12px;
 
-/* Light mode = strict inversion, never the primary face */
-.light {
-	--background: var(--p443-light-canvas);
-	--foreground: var(--p443-light-ink);
-	--card: var(--p443-light-surface);
-	--card-foreground: var(--p443-light-ink);
-	--popover: var(--p443-light-surface);
-	--popover-foreground: var(--p443-light-ink);
-	--secondary: var(--p443-light-surface);
-	--secondary-foreground: var(--p443-light-ink-muted);
-	--muted: var(--p443-light-surface);
-	--muted-foreground: var(--p443-light-ink-muted);
-	--border: rgba(26, 26, 26, 0.12);
-	--input: rgba(26, 26, 26, 0.16);
-	--ring: var(--p443-primary);
+	/* Event themes. Always paired with a text label, never color alone. */
+	--theme-music: var(--fl-lilac-100);
+	--theme-music-foreground: var(--fl-lilac-800);
+	--theme-stage: var(--fl-pink-100);
+	--theme-stage-foreground: var(--fl-pink-800);
+	--theme-arts: var(--fl-sky-100);
+	--theme-arts-foreground: var(--fl-sky-800);
+	--theme-food: var(--fl-peach-100);
+	--theme-food-foreground: var(--fl-peach-800);
+	--theme-outdoors: var(--fl-butter-100);
+	--theme-outdoors-foreground: var(--fl-butter-800);
 }
 
 @layer base {
@@ -112,80 +125,69 @@
 		@apply border-border outline-ring/50;
 	}
 	body {
-		@apply bg-background text-foreground antialiased;
-		font-family: var(--p443-font-body);
-		font-size: 17px;
+		@apply bg-background font-sans text-foreground antialiased;
+		font-size: 1rem;
 		line-height: 1.6;
 	}
 	html {
 		@apply font-sans;
 		scroll-behavior: smooth;
 	}
+	@media (prefers-reduced-motion: reduce) {
+		html {
+			scroll-behavior: auto;
+		}
+	}
 }
 
-/* ── Type utilities ── */
-@utility p443-display {
-	font-family: var(--p443-font-display);
-	font-size: clamp(40px, 5vw, 64px);
-	font-weight: 800;
-	line-height: 1;
+/* ── Type roles: size, line-height and weight decided together ── */
+@utility type-display {
+	font-family: var(--font-serif);
+	font-size: clamp(2.125rem, 4.6vw, 3.75rem);
+	font-weight: 400;
+	line-height: 1.06;
+	letter-spacing: -0.025em;
+}
+@utility type-headline {
+	font-family: var(--font-serif);
+	font-size: clamp(2rem, 4vw, 2.75rem);
+	font-weight: 400;
+	line-height: 1.1;
 	letter-spacing: -0.02em;
 }
-@utility p443-headline {
-	font-family: var(--p443-font-display);
-	font-size: 40px;
-	font-weight: 700;
-	line-height: 1.1;
-	letter-spacing: -0.01em;
+@utility type-section {
+	font-family: var(--font-serif);
+	font-size: 1.625rem;
+	font-weight: 500;
+	line-height: 1.2;
+	letter-spacing: -0.015em;
 }
-@utility p443-section-title {
-	font-family: var(--p443-font-display);
-	font-size: 28px;
-	font-weight: 700;
-	line-height: 1.15;
-}
-@utility p443-card-title {
-	font-family: var(--p443-font-display);
-	font-size: 20px;
-	font-weight: 700;
+@utility type-card {
+	font-family: var(--font-serif);
+	font-size: 1.1875rem;
+	font-weight: 500;
 	line-height: 1.3;
+	letter-spacing: -0.005em;
 }
-@utility p443-dek {
-	font-family: var(--p443-font-body);
-	font-size: 20px;
+@utility type-dek {
+	font-family: var(--font-sans);
+	font-size: 1.0625rem;
 	font-weight: 400;
-	line-height: 1.5;
+	line-height: 1.6;
 }
-@utility p443-eyebrow {
-	font-family: var(--p443-font-body);
-	font-size: 13px;
-	font-weight: 700;
-	line-height: 1.2;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	color: var(--p443-ink-muted);
+/* Captions, field labels, counts. Sentence case, never uppercase. */
+@utility type-label {
+	font-family: var(--font-sans);
+	font-size: 0.8125rem;
+	font-weight: 500;
+	line-height: 1.4;
 }
-@utility p443-eyebrow-accent {
-	font-family: var(--p443-font-body);
-	font-size: 13px;
-	font-weight: 700;
-	line-height: 1.2;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	color: var(--p443-primary);
-}
-@utility p443-btn {
-	font-family: var(--p443-font-body);
-	font-size: 16px;
+@utility type-wordmark {
+	font-family: var(--font-serif);
+	font-size: 1.375rem;
 	font-weight: 600;
-	line-height: 1.2;
-	border-radius: var(--p443-r-md);
-}
-@utility p443-wordmark {
-	font-family: var(--p443-font-display);
-	font-size: 20px;
-	font-weight: 800;
-	letter-spacing: -0.01em;
+	line-height: 1;
+	letter-spacing: -0.02em;
 	color: inherit;
 	text-decoration: none;
 }

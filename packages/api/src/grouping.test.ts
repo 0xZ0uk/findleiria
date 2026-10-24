@@ -121,6 +121,27 @@ describe("mergeSameDaySessions", () => {
 		expect(show?.sessionStarts).toEqual([d1_1630, d1_1830, d1_2130]);
 	});
 
+	test("a later session's isFree / featuredAt fill the merged row's blanks, never replace", () => {
+		type Picked = ReturnType<typeof row> & {
+			isFree?: boolean | null;
+			featuredAt?: number | null;
+		};
+		const first: Picked = {
+			...row(1, "Show", 7, d1_1630),
+			isFree: null,
+			featuredAt: 5,
+		};
+		const second: Picked = {
+			...row(2, "Show", 7, d1_1830),
+			isFree: true,
+			featuredAt: 9,
+		};
+		const third: Picked = { ...row(3, "Show", 7, d1_2130), isFree: false };
+		const [show] = mergeSameDaySessions([first, second, third]);
+		expect(show?.isFree).toBe(true);
+		expect(show?.featuredAt).toBe(5);
+	});
+
 	test("empty input", () => {
 		expect(mergeSameDaySessions([])).toEqual([]);
 	});

@@ -6,6 +6,7 @@ import { createFetchGate } from "./lib/fetch-gate";
 import { lastPageFromHtml } from "./lib/pagination";
 import { monthFromName } from "./lib/pt-dates";
 import { defaultSleep, randomDelay } from "./lib/timing";
+import { detectFree } from "./normalize";
 import type { RawEvent } from "./types";
 
 /** A cheerio selection of elements, i.e. what `$("selector")` returns. */
@@ -167,6 +168,23 @@ export function parseDetail(html: string, url: string): RawEvent {
 	const title = scope.find("h1.title").first().text().trim();
 	const slug = url.split("/").filter(Boolean).at(-1) ?? "";
 
+	const synopsis =
+		$(".text.sinopse").first().find("p").first().text().trim() || null;
+	// "Outras Informações" is where the CMS states admission ("Entrada livre").
+	// <br>s become sentence breaks so adjacent lines do not run into one word.
+	const otherInfo = $(".text.ficha_tecnica")
+		.filter((_, el) => $(el).find("h2").text().includes("Outras Informações"))
+		.map((_, el) => {
+			const block = $(el).clone();
+			block.find("br").replaceWith(". ");
+			return block
+				.find("p")
+				.map((_, p) => $(p).text())
+				.get()
+				.join(". ");
+		})
+		.get()
+		.join(". ");
 	const start = parseDateNode($, scope, "inicio");
 	const end = parseDateNode($, scope, "fim");
 	if (!start) {
@@ -176,8 +194,7 @@ export function parseDetail(html: string, url: string): RawEvent {
 	return {
 		title,
 		slug,
-		description:
-			$(".text.sinopse").first().find("p").first().text().trim() || null,
+		description: synopsis,
 		startAt: toEpochInLisbon(
 			start.year,
 			start.month,
@@ -194,6 +211,7 @@ export function parseDetail(html: string, url: string): RawEvent {
 		categories: collectCategories($, scope),
 		imageUrl: null, // details carry no reliable thumbnail; keep the card's.
 		url,
+		isFree: detectFree(`${title}. ${synopsis ?? ""}. ${otherInfo}`),
 	};
 }
 
@@ -215,6 +233,7 @@ export function mergeCardWithDetail(
 			detail.categories.length > 0 ? detail.categories : card.categories,
 		imageUrl: detail.imageUrl ?? card.imageUrl,
 		url: detail.url || card.url,
+		isFree: detail.isFree ?? null,
 	};
 }
 

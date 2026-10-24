@@ -9,24 +9,24 @@ const buttonVariants = cva(
 			variant: {
 				/* Primary CTA: amber fill — the ONE colour in the system */
 				default:
-					"rounded-[4px] bg-[var(--p443-primary)] text-[var(--p443-on-primary)] hover:bg-[var(--p443-primary-hover)]",
+					"rounded-[4px] bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)]",
 				/* Secondary: dark surface, ink text */
 				secondary:
-					"rounded-[4px] border border-[var(--p443-hairline)] bg-[var(--p443-surface)] text-[var(--p443-ink)] hover:border-[var(--p443-ink-muted)]",
+					"rounded-[4px] border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] hover:border-[var(--muted-foreground)]",
 				/* Ghost: quiet, muted */
 				ghost:
-					"rounded-[4px] bg-transparent text-[var(--p443-ink-muted)] hover:bg-[var(--p443-surface)] hover:text-[var(--p443-ink)]",
+					"rounded-[4px] bg-transparent text-[var(--muted-foreground)] hover:bg-[var(--card)] hover:text-[var(--foreground)]",
 				/* Outline: hairline border, sharp */
 				outline:
-					"rounded-[4px] border border-[var(--p443-hairline)] bg-transparent text-[var(--p443-ink)] hover:border-[var(--p443-ink-muted)] aria-expanded:bg-muted aria-expanded:text-foreground",
+					"rounded-[4px] border border-[var(--border)] bg-transparent text-[var(--foreground)] hover:border-[var(--muted-foreground)] aria-expanded:bg-muted aria-expanded:text-foreground",
 				destructive:
 					"bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20",
-				link: "text-[var(--p443-primary)] underline-offset-4 hover:underline",
+				link: "text-[var(--primary)] underline-offset-4 hover:underline",
 				/* Legacy Arc variants kept as aliases → primary look */
-				arc: "h-[52px] rounded-[4px] bg-[var(--p443-primary)] px-[22px] text-[15px] text-[var(--p443-on-primary)] hover:bg-[var(--p443-primary-hover)]",
+				arc: "h-[52px] rounded-[4px] bg-[var(--primary)] px-[22px] text-[15px] text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)]",
 				"arc-cta":
-					"h-[52px] gap-3 rounded-[4px] bg-[var(--p443-primary)] px-[22px] text-[16px] text-[var(--p443-on-primary)] hover:bg-[var(--p443-primary-hover)]",
-				blue: "rounded-[4px] bg-[var(--p443-primary)] text-[var(--p443-on-primary)] hover:bg-[var(--p443-primary-hover)]",
+					"h-[52px] gap-3 rounded-[4px] bg-[var(--primary)] px-[22px] text-[16px] text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)]",
+				blue: "rounded-[4px] bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)]",
 			},
 			size: {
 				default:

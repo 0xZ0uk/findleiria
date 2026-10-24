@@ -8,12 +8,15 @@ function currentPath(): string {
 	return typeof window === "undefined" ? "/" : window.location.pathname;
 }
 
-const MICRO_NAV =
-	"font-mono text-[11px] font-medium uppercase tracking-[0.14em]";
+const TAB_LABEL = "text-[12px] font-medium leading-none";
+
+/** The pill behind a tab's icon: tinted when the tab is the current page. */
+const TAB_PILL =
+	"grid h-8 w-14 place-items-center rounded-full motion-safe:transition-colors";
 
 type TabSpec = { href: string; label: string; icon: LucideIcon };
 
-/** One desktop inline link in the masthead row. */
+/** One segment of the desktop nav. The current page sits raised on white. */
 function DeskNavLink({ href, label }: { href: string; label: string }) {
 	const active =
 		currentPath() === href || (href !== "/" && currentPath().startsWith(href));
@@ -21,8 +24,10 @@ function DeskNavLink({ href, label }: { href: string; label: string }) {
 		<a
 			href={href}
 			aria-current={active ? "page" : undefined}
-			className={`focus-ring inline-flex h-10 items-center rounded-[4px] px-3 font-medium text-[14px] motion-safe:transition-colors ${
-				active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+			className={`focus-ring inline-flex h-9 items-center rounded-full px-4 font-medium text-[14px] motion-safe:transition-colors ${
+				active
+					? "bg-background text-foreground shadow-[0_1px_3px_rgb(23_34_27/0.12)]"
+					: "text-muted-foreground hover:text-foreground"
 			}`}
 		>
 			{label}
@@ -31,16 +36,14 @@ function DeskNavLink({ href, label }: { href: string; label: string }) {
 }
 
 /**
- * The top navigation — the condensed route set, inline in the header row,
- * desktop only. Hidden below `sm`, where the bottom tab bar takes over.
+ * The top navigation — the condensed route set as one segmented pill, next to
+ * the wordmark, desktop only. Hidden below `sm`, where the bottom tab bar takes
+ * over.
  */
 export function TopNav() {
 	return (
-		<nav
-			aria-label="Principal"
-			className="absolute top-1/2 left-1/2 hidden -translate-x-1/2 -translate-y-1/2 sm:block"
-		>
-			<div className="flex items-center gap-1">
+		<nav aria-label="Principal" className="hidden sm:block">
+			<div className="flex items-center gap-1 rounded-full border border-border bg-card p-1">
 				<DeskNavLink href="/" label="Agenda" />
 				<DeskNavLink href={savedHref()} label="Guardados" />
 			</div>
@@ -48,7 +51,11 @@ export function TopNav() {
 	);
 }
 
-/** One mobile tab in the bottom bar. Active tab reads in amber, targets ≥44px. */
+/**
+ * One mobile tab in the bottom bar. The active tab reads in green with a
+ * tinted pill behind its icon, so the state never rests on colour alone.
+ * Targets ≥44px.
+ */
 function Tab({
 	href,
 	label,
@@ -59,13 +66,15 @@ function Tab({
 		<a
 			href={href}
 			aria-current={active ? "page" : undefined}
-			className={`focus-ring inline-flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-[4px] motion-safe:transition-colors ${
+			className={`focus-ring inline-flex min-h-[60px] flex-col items-center justify-center gap-1 rounded-2xl motion-safe:transition-colors ${
 				active ? "text-primary" : "text-muted-foreground"
 			}`}
 		>
-			<Icon aria-hidden="true" strokeWidth={1.5} className="size-5" />
+			<span className={`${TAB_PILL} ${active ? "bg-primary-surface" : ""}`}>
+				<Icon aria-hidden="true" strokeWidth={1.75} className="size-5" />
+			</span>
 			<span
-				className={`${MICRO_NAV} ${active ? "text-primary" : "text-muted-foreground"}`}
+				className={`${TAB_LABEL} ${active ? "text-primary" : "text-muted-foreground"}`}
 			>
 				{label}
 			</span>
@@ -87,13 +96,15 @@ function ContaTab({ active }: { active: boolean }) {
 			<a
 				href="/entrar"
 				aria-current={active ? "page" : undefined}
-				className={`focus-ring inline-flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-[4px] motion-safe:transition-colors ${
+				className={`focus-ring inline-flex min-h-[60px] flex-col items-center justify-center gap-1 rounded-2xl motion-safe:transition-colors ${
 					active ? "text-primary" : "text-muted-foreground"
 				}`}
 			>
-				<User aria-hidden="true" strokeWidth={1.5} className="size-5" />
+				<span className={`${TAB_PILL} ${active ? "bg-primary-surface" : ""}`}>
+					<User aria-hidden="true" strokeWidth={1.75} className="size-5" />
+				</span>
 				<span
-					className={`${MICRO_NAV} ${active ? "text-primary" : "text-muted-foreground"}`}
+					className={`${TAB_LABEL} ${active ? "text-primary" : "text-muted-foreground"}`}
 				>
 					Conta
 				</span>
@@ -105,19 +116,16 @@ function ContaTab({ active }: { active: boolean }) {
 	return (
 		<AccountDisclosure
 			email={user.email}
-			triggerClassName="focus-ring inline-flex min-h-[56px] w-full flex-col items-center justify-center gap-1 rounded-[4px] motion-safe:transition-colors aria-expanded:text-primary text-muted-foreground"
-			panelClassName="absolute bottom-full left-1/2 z-30 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-[4px] border border-border bg-card p-4 shadow-lg sm:hidden"
-			captionClassName={`${MICRO_NAV} text-muted-foreground`}
-			signOutClassName="focus-ring mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-[4px] border border-control text-[14px] hover:border-primary/60 hover:text-primary motion-safe:transition-colors"
+			triggerClassName="focus-ring inline-flex min-h-[60px] w-full flex-col items-center justify-center gap-1 rounded-2xl motion-safe:transition-colors aria-expanded:text-primary text-muted-foreground"
+			panelClassName="absolute bottom-full left-1/2 z-30 mb-2 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-2xl border border-border bg-popover p-4 shadow-[0_12px_32px_-12px_rgb(23_34_27/0.25)] sm:hidden"
+			captionClassName={`${TAB_LABEL} text-muted-foreground`}
+			signOutClassName="focus-ring mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-control font-medium text-[14px] hover:bg-card motion-safe:transition-colors"
 			trigger={(open) => (
 				<>
-					<User
-						aria-hidden="true"
-						strokeWidth={1.5}
-						className="size-5"
-						fill={open ? "currentColor" : "none"}
-					/>
-					<span className={MICRO_NAV}>Conta</span>
+					<span className={`${TAB_PILL} ${open ? "bg-primary-surface" : ""}`}>
+						<User aria-hidden="true" strokeWidth={1.75} className="size-5" />
+					</span>
+					<span className={TAB_LABEL}>Conta</span>
 				</>
 			)}
 		/>
@@ -143,7 +151,7 @@ export function BottomNav() {
 			className="fixed inset-x-0 bottom-0 z-40 border-border border-t bg-background/95 backdrop-blur-sm sm:hidden"
 		>
 			<div
-				className="relative mx-auto grid w-full max-w-md grid-cols-3"
+				className="relative mx-auto grid w-full max-w-md grid-cols-3 px-2 pt-1"
 				style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
 			>
 				<Tab

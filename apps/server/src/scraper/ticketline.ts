@@ -5,6 +5,7 @@ import { defaultFetchText } from "./http";
 import { createFetchGate } from "./lib/fetch-gate";
 import { ymdToEpoch } from "./lib/pt-dates";
 import { defaultSleep, randomDelay } from "./lib/timing";
+import { freeFromPrices } from "./normalize";
 import type { RawEvent } from "./types";
 
 /**
@@ -310,5 +311,6 @@ export function toRawEvent(
 		categories: row.categories,
 		imageUrl: null,
 		url,
+		isFree: freeFromPrices(detail?.prices ?? []),
 	};
 }

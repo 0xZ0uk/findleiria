@@ -14,7 +14,8 @@
 		"digest": "varlock run -- bun run src/digest-cli.ts",
 		"scrape": "varlock run -- bun run src/scraper/run.ts",
 		"daily": "varlock run -- bun run src/scraper/daily.ts",
-		"ingest:url": "varlock run -- bun run src/ingest-url.ts"
+		"ingest:url": "varlock run -- bun run src/ingest-url.ts",
+		"feature": "varlock run -- bun run src/feature.ts"
 	},
 	"varlock": {
 		"loadPath": "../../",

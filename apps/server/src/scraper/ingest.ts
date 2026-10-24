@@ -560,6 +560,9 @@ async function upsertEvent(
 		const existingCats = (existing.categories ?? []) as string[];
 		const mergedCats = sortCategories([...existingCats, ...categories]);
 		const mergedUrl = existing.url ?? raw.url;
+		// A known free/paid flag wins over unknown and is never overwritten, not
+		// even by a source that disagrees; featured_at is not ingest's to touch.
+		const mergedFree = existing.is_free ?? raw.isFree ?? null;
 		let mergedEnd = existing.end_at ?? (raw.startAt != null ? raw.endAt : null);
 		let refresh: Refresh | null = null;
 		const laterDay =
@@ -586,6 +589,7 @@ async function upsertEvent(
 			!sameCategories(existingCats, mergedCats) ||
 			existing.end_at !== mergedEnd ||
 			existing.url !== mergedUrl ||
+			existing.is_free !== mergedFree ||
 			(refresh != null &&
 				(refresh.title !== existing.title ||
 					refresh.start_at !== existing.start_at ||
@@ -597,6 +601,7 @@ async function upsertEvent(
 					categories: mergedCats,
 					end_at: mergedEnd,
 					url: mergedUrl,
+					is_free: mergedFree,
 					...(refresh
 						? {
 								title: refresh.title,
@@ -664,6 +669,7 @@ async function upsertEvent(
 			url: raw.url,
 			categories,
 			date_text: raw.dateText,
+			is_free: raw.isFree ?? null,
 			fingerprint: fp,
 			created_at: now,
 			updated_at: now,

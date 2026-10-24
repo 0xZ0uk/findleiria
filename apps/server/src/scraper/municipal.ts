@@ -12,7 +12,7 @@ import {
 } from "./lib/parse-attempts";
 import { monthFromPrefix } from "./lib/pt-dates";
 import { defaultSleep, randomDelay } from "./lib/timing";
-import { decodeEntities } from "./normalize";
+import { decodeEntities, detectFree } from "./normalize";
 import { loadState, saveState } from "./state";
 import type { RawEvent } from "./types";
 
@@ -602,6 +602,7 @@ export function toRawEvent(
 		categories: detail.categories,
 		imageUrl: detail.imageUrl,
 		url,
+		isFree: detectFree(`${title}. ${detail.description ?? ""}`),
 	};
 }
 

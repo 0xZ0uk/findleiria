@@ -95,15 +95,15 @@ export function peak(tallies: ConcelhoTally[]): number {
 /**
  * Heat, on one hue.
  *
- * The brand has exactly one colour, so intensity — not hue — carries the
- * magnitude: a square-root ramp, because counts here are lopsided (one concelho
+ * Activity has exactly one colour, the primary green, so intensity — not hue —
+ * carries the magnitude: a square-root ramp, because counts here are lopsided (one concelho
  * can hold a fifth of the window) and a linear ramp would leave every other
  * concelho indistinguishable from empty. Zero is barely tinted rather than
  * blank: an empty concelho is still a concelho, and its outline is information.
  *
  * Opacity, not a blended colour string: the fill colour is the brand token
- * itself, so the map follows the theme (and any token change) without a second
- * source of truth for what "amber" is.
+ * itself, so the map follows any token change without a second source of truth
+ * for what the primary green is.
  */
 export function heatOpacity(count: number, max: number): number {
 	if (count <= 0 || max <= 0) return 0.05;

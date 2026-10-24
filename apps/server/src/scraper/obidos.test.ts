@@ -233,6 +233,24 @@ describe("toRawEvent", () => {
 	});
 });
 
+describe("isFree", () => {
+	test("comes from the title and description wording, else null", () => {
+		const page = parseDetail(folioHtml);
+		const free = toRawEvent(
+			{ ...page, description: "Programa com entrada gratuita." },
+			folioUrl(),
+			NOW,
+		);
+		expect(free?.isFree).toBe(true);
+		const silent = toRawEvent(
+			{ ...page, description: "Programa completo." },
+			folioUrl(),
+			NOW,
+		);
+		expect(silent?.isFree).toBeNull();
+	});
+});
+
 describe("gate (tests run via a mock isInScope like production wiring)", () => {
 	test("an in-district event passes isLeiriaDistrict on its city", () => {
 		const raw = toRawEvent(parseDetail(folioHtml), folioUrl(), NOW);

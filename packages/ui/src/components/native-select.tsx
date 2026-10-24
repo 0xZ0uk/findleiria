@@ -23,7 +23,7 @@ function NativeSelect({
 			<select
 				data-slot="native-select"
 				data-size={size}
-				className="h-9 w-full min-w-0 select-none appearance-none rounded-[2px] border border-[var(--p443-hairline)] bg-[var(--p443-surface)] py-1 pr-8 pl-3 font-medium text-[var(--p443-ink)] text-sm outline-none transition-colors hover:border-[var(--p443-ink-muted)] focus-visible:border-[var(--p443-primary)] focus-visible:ring-2 focus-visible:ring-[var(--p443-primary)]/30 disabled:pointer-events-none disabled:cursor-not-allowed aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20 data-[size=sm]:h-8 data-[size=sm]:rounded-[2px] data-[size=sm]:py-0.5"
+				className="h-9 w-full min-w-0 select-none appearance-none rounded-[2px] border border-[var(--border)] bg-[var(--card)] py-1 pr-8 pl-3 font-medium text-[var(--foreground)] text-sm outline-none transition-colors hover:border-[var(--muted-foreground)] focus-visible:border-[var(--primary)] focus-visible:ring-2 focus-visible:ring-[var(--primary)]/30 disabled:pointer-events-none disabled:cursor-not-allowed aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20 data-[size=sm]:h-8 data-[size=sm]:rounded-[2px] data-[size=sm]:py-0.5"
 				{...props}
 			/>
 			<ChevronDownIcon

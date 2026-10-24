@@ -193,6 +193,12 @@ describe("toRawEvent", () => {
 		expect(raw.url).toBe("https://www.nocartaz.pt/eventos/06009145e171bc07/");
 	});
 
+	test("data-free=1 is free; data-free=0 stays unknown, never paid", () => {
+		const marionetas = must(cards.find((c) => c.id === "b986d96186f069fe"));
+		expect(toRawEvent(marionetas, null, NOW, inDistrict)?.isFree).toBe(true);
+		expect(toRawEvent(first, null, NOW, inDistrict)?.isFree).toBeNull();
+	});
+
 	test("an out-of-district aggregator row is dropped, not filed under Leiria", () => {
 		expect(
 			toRawEvent(santarem, parseDetail(detailOutOfDistrict), NOW, inDistrict),

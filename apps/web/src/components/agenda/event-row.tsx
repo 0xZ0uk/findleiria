@@ -1,7 +1,8 @@
 import { ExternalLink } from "lucide-react";
 import { Fragment, type ReactNode, useState } from "react";
 import { meshGradient } from "@/utils/mesh-gradient";
-import { MICRO } from "./layout";
+import { eventTheme, NEUTRAL_TAG, THEME_TAG, themeOf } from "@/utils/themes";
+import { TAG } from "./layout";
 
 export type RowProps = {
 	title: string;
@@ -33,6 +34,16 @@ export type RowProps = {
 	 */
 	saveSlot?: ReactNode;
 };
+
+/** A category as a pill in its theme's pastel; neutral when it has no theme. */
+function ThemeTag({ label }: { label: string }) {
+	const theme = themeOf(label);
+	return (
+		<span className={`${TAG} ${theme ? THEME_TAG[theme] : NEUTRAL_TAG}`}>
+			{label}
+		</span>
+	);
+}
 
 /**
  * One agenda line.
@@ -68,10 +79,10 @@ export function EventRow({
 	saveSlot,
 }: RowProps) {
 	const [broken, setBroken] = useState(false);
-	const tile = meshGradient(seed ?? title);
+	const tile = meshGradient(seed ?? title, eventTheme(chips));
 
 	const timeClass =
-		"col-start-1 row-start-1 pt-0.5 font-mono text-[13px] leading-tight tabular-nums text-muted-foreground sm:col-start-2 sm:text-[14px]";
+		"col-start-1 row-start-1 pt-1 font-medium text-[14px] leading-tight tabular-nums sm:col-start-2 sm:pt-0 sm:text-[15px]";
 	const place = venue && city ? `${venue} · ${city}` : (venue ?? city ?? null);
 	const meta = [note, place].filter((part): part is string => Boolean(part));
 
@@ -93,7 +104,7 @@ export function EventRow({
 		<>
 			<span
 				style={tile}
-				className="col-start-1 row-start-1 hidden size-16 overflow-hidden rounded-[4px] bg-card outline-1 outline-border -outline-offset-1 sm:block"
+				className="col-start-1 row-start-1 hidden size-16 overflow-hidden rounded-xl sm:block"
 			>
 				{imageUrl && !broken ? (
 					<img
@@ -116,10 +127,10 @@ export function EventRow({
 			)}
 
 			<div className="col-start-2 row-start-1 min-w-0 sm:col-start-3">
-				<h3 className="line-clamp-3 font-semibold text-[17px] leading-snug sm:line-clamp-2">
+				<h3 className="type-card line-clamp-3 text-[1.0625rem] decoration-from-font underline-offset-3 group-hover:underline sm:line-clamp-2 sm:text-[1.1875rem]">
 					{title}
 				</h3>
-				<p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-sm">
+				<p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[14px] text-muted-foreground">
 					{meta.map((part, index) => (
 						<Fragment key={part}>
 							{index > 0 ? <span aria-hidden="true">·</span> : null}
@@ -127,21 +138,16 @@ export function EventRow({
 						</Fragment>
 					))}
 					{chips.map((chip) => (
-						<span
-							key={chip}
-							className={`${MICRO} shrink-0 rounded-[2px] border border-border px-1.5 py-0.5`}
-						>
-							{chip}
-						</span>
+						<ThemeTag key={chip} label={chip} />
 					))}
 					{extraSessions.length > 0 ? (
-						<span className="shrink-0 font-mono text-[12px] tabular-nums">
+						<span className="shrink-0 tabular-nums">
 							também às {extraSessions.join(", ")}
 						</span>
 					) : null}
 					{href
 						? sourceLink(
-								"relative z-20 inline-flex shrink-0 items-center sm:hidden",
+								"focus-ring relative z-20 -my-3 inline-flex min-h-11 min-w-8 shrink-0 items-center justify-center rounded-full sm:hidden",
 							)
 						: null}
 				</p>
@@ -149,12 +155,12 @@ export function EventRow({
 
 			{href
 				? sourceLink(
-						"relative z-20 col-start-4 row-start-1 mt-1 hidden items-center justify-center text-control group-hover:text-foreground motion-safe:transition-colors sm:flex",
+						"focus-ring relative z-20 col-start-4 row-start-1 hidden size-11 items-center justify-center rounded-full text-muted-foreground hover:bg-card hover:text-foreground motion-safe:transition-colors sm:flex",
 					)
 				: null}
 
 			{saveSlot ? (
-				<div className="relative z-20 col-start-3 row-start-1 flex justify-end sm:col-start-5">
+				<div className="relative z-20 col-start-3 row-start-1 -mt-2 flex justify-end sm:col-start-5 sm:mt-0">
 					{saveSlot}
 				</div>
 			) : null}
@@ -162,16 +168,10 @@ export function EventRow({
 	);
 
 	const shape =
-		"group relative -mx-2 grid scroll-mt-16 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-start gap-x-3 rounded-[4px] px-2 py-3 sm:grid-cols-[4rem_3.5rem_minmax(0,1fr)_1rem_auto] sm:gap-x-4";
+		"group relative grid scroll-mt-20 grid-cols-[3rem_minmax(0,1fr)_auto] items-start gap-x-3 border-border border-b py-4 sm:grid-cols-[4rem_3.5rem_minmax(0,1fr)_2.75rem_auto] sm:items-center sm:gap-x-5";
 	// Joined, not concatenated: a missing space silently merged two classes and
 	// dropped `relative`, which sent every stretched link to the viewport corner.
-	const rowClass = [
-		shape,
-		destination ? "hover:bg-card" : "",
-		"motion-safe:transition-colors",
-	]
-		.filter(Boolean)
-		.join(" ");
+	const rowClass = shape;
 
 	return (
 		<li>
@@ -187,7 +187,7 @@ export function EventRow({
 						{...(external
 							? { target: "_blank", rel: "noopener noreferrer" }
 							: {})}
-						className="focus-ring absolute inset-0 z-10 rounded-[4px]"
+						className="focus-ring absolute inset-0 z-10 rounded-lg"
 					/>
 				) : null}
 				{body}

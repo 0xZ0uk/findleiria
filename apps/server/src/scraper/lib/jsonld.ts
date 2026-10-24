@@ -95,3 +95,26 @@ export function findJsonLdEvent<T = JsonLdNode>(
 	}
 	return null;
 }
+
+/**
+ * The ticket prices a node's `offers` state (an Offer, an AggregateOffer's
+ * `lowPrice`, or an array of them): numbers or strings as published, in
+ * document order. Empty when the page prices nothing.
+ */
+export function offerPrices(node: { offers?: unknown }): (string | number)[] {
+	const out: (string | number)[] = [];
+	const walk = (value: unknown) => {
+		if (Array.isArray(value)) {
+			for (const v of value) walk(v);
+			return;
+		}
+		if (value === null || typeof value !== "object") return;
+		const offer = value as JsonLdNode;
+		const price = offer.price ?? offer.lowPrice;
+		if (typeof price === "string" || typeof price === "number") {
+			out.push(price);
+		}
+	};
+	walk(node.offers);
+	return out;
+}

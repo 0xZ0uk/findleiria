@@ -60,6 +60,23 @@ describe("toRawEvent", () => {
 		);
 	});
 
+	test("isFree from the JSON-LD offers: priced is paid, all-zero is free, none is unknown", () => {
+		const ld = must(parseDetailLd(detailHtml));
+		expect(must(toRawEvent("x", ld)).isFree).toBe(false);
+		const free = { ...ld, offers: [{ "@type": "Offer", price: 0 }] };
+		expect(must(toRawEvent("x", free)).isFree).toBe(true);
+		const mixed = {
+			...ld,
+			offers: [
+				{ "@type": "Offer", price: 0 },
+				{ "@type": "Offer", price: 8 },
+			],
+		};
+		expect(must(toRawEvent("x", mixed)).isFree).toBeNull();
+		const { offers: _offers, ...unpriced } = ld;
+		expect(must(toRawEvent("x", unpriced)).isFree).toBeNull();
+	});
+
 	test("null when JSON-LD has no name or start", () => {
 		expect(toRawEvent("x", { name: "x", "@type": "Event" })).toBeNull();
 	});

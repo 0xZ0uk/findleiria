@@ -79,6 +79,17 @@ describe("toRawEvent (Leiria city scope)", () => {
 		expect(raw.city).toBe("Leiria");
 	});
 
+	test("isFree comes from the detail's prices only", () => {
+		const pigs = rowById(parseSearch(searchHtml, true), "106704");
+		const priced = must(parseDetail(detail2Html));
+		expect(must(toRawEvent(pigs, priced)).isFree).toBe(false);
+		expect(
+			must(toRawEvent(pigs, { ...priced, prices: ["Grátis"] })).isFree,
+		).toBe(true);
+		expect(must(toRawEvent(pigs, { ...priced, prices: [] })).isFree).toBeNull();
+		expect(must(toRawEvent(pigs, null)).isFree).toBeNull();
+	});
+
 	test("non-Leiria row with no Leiria marker is dropped", () => {
 		const rhythm = rowById(parseSearch(searchHtml, false), "106964");
 		expect(toRawEvent(rhythm, null)).toBeNull();

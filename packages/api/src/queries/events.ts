@@ -24,6 +24,8 @@ const eventSelect = {
 	url: schema.events.url,
 	categories: schema.events.categories,
 	date_text: schema.events.date_text,
+	is_free: schema.events.is_free,
+	featured_at: schema.events.featured_at,
 	venueName: schema.venues.name,
 	venueCity: schema.venues.city,
 	venueSlug: schema.venues.slug,
@@ -54,6 +56,8 @@ type EventRow = {
 	url: string | null;
 	categories: string[] | null;
 	date_text: string | null;
+	is_free: boolean | null;
+	featured_at: number | null;
 	venueName: string | null;
 	venueCity: string | null;
 	venueSlug: string | null;
@@ -80,6 +84,10 @@ function toPublicEvent(row: EventRow) {
 		url: row.url,
 		categories: row.categories ?? [],
 		dateText: row.date_text,
+		/** true = free, false = paid, null = no source said. */
+		isFree: row.is_free,
+		/** Epoch seconds the event was hand-picked as a week's pick; null = not picked. */
+		featuredAt: row.featured_at,
 	};
 }
 

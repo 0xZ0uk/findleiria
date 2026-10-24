@@ -99,6 +99,22 @@ describe("buildRawEvents (offline fixture)", () => {
 		expect(events[0]?.url).toBe(card.url);
 	});
 
+	test("isFree reads the detail's JSON-LD Offer price", () => {
+		const card = {
+			id: 176997,
+			url: "https://www.bol.pt/Comprar/Bilhetes/176997-x/",
+			eventSlug: "x",
+			venueSlug: "y",
+		};
+		// The fixture's Offer is priced at 25 EUR.
+		expect(buildRawEvents(card, detailHtml)[0]?.isFree).toBe(false);
+		const free = detailHtml.replace('"price": "25"', '"price": "0"');
+		expect(buildRawEvents(card, free)[0]?.isFree).toBe(true);
+		const unpriced = detailHtml.replace('"price": "25",', "");
+		expect(unpriced).not.toBe(detailHtml);
+		expect(buildRawEvents(card, unpriced)[0]?.isFree).toBeNull();
+	});
+
 	test("city is null at raw level — resolved at ingest (district scope)", () => {
 		const card = {
 			id: 1,

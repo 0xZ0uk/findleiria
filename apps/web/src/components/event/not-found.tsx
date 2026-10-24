@@ -1,4 +1,4 @@
-import { BUTTON, MICRO, SHELL } from "@/components/agenda/layout";
+import { BUTTON, CAPTION, SHELL } from "@/components/agenda/layout";
 import { SHELL_DESCRIPTION, useDocumentMeta } from "@/hooks/use-document-meta";
 
 /**
@@ -17,10 +17,8 @@ export function EventNotFound() {
 
 	return (
 		<main className={`${SHELL} py-20 sm:py-28`}>
-			<p className={MICRO}>Erro 404</p>
-			<h1 className="mt-3 text-balance font-semibold text-3xl sm:text-4xl">
-				Não temos este evento
-			</h1>
+			<p className={`${CAPTION} text-primary`}>Erro 404</p>
+			<h1 className="type-headline mt-3 text-balance">Não temos este evento</h1>
 			<p className="mt-3 max-w-prose text-muted-foreground">
 				O endereço pode estar incompleto, ou o evento saiu da agenda. A lista
 				completa está sempre na página principal.

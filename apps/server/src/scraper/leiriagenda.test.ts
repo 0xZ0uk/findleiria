@@ -51,6 +51,13 @@ describe("parseDetail (offline fixture)", () => {
 		expect(detail.description).toContain("Tattoo Artes Leiria 2026");
 	});
 
+	test("isFree reads 'Entrada livre' from the Outras Informações block", () => {
+		expect(detail.isFree).toBe(true);
+		const silent = detailHtml.replace("Entrada livre", "Entrada no local");
+		expect(silent).not.toBe(detailHtml);
+		expect(parseDetail(silent, TATTOO_URL).isFree).toBeNull();
+	});
+
 	test("parses .hora into the correct epoch (2026-09-04 14:00 Lisbon)", () => {
 		expect(detail.startAt).toBe(1788526800);
 		expect(lisbonDay(must(detail.startAt))).toBe("2026-09-04");
@@ -70,6 +77,7 @@ describe("parseDetail (offline fixture)", () => {
 		expect(merged.venueName).toBe("Centro Cultural Mercado de Sant'Ana");
 		// Detail carries richer, canonical categories (preferred over the card's).
 		expect(merged.categories).toEqual(["Feira", "Eventos", "Cultura"]);
+		expect(merged.isFree).toBe(true);
 	});
 
 	test("fingerprint is deterministic for the resolved venue", () => {

@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import {
 	decodeEntities,
+	detectFree,
+	freeFromPrices,
 	isVagueVenue,
 	normalizeCity,
 	normalizeTitle,
@@ -205,5 +207,91 @@ describe("decodeEntities (single canonical table)", () => {
 		expect(decodeEntities("Le Raincy & Foz do Arelho")).toBe(
 			"Le Raincy & Foz do Arelho",
 		);
+	});
+});
+
+describe("detectFree", () => {
+	test("free-entry phrasing is true, any case or accent", () => {
+		for (const text of [
+			"Entrada livre",
+			"ENTRADA GRATUITA",
+			"Concerto gratuito no jardim",
+			"Espetáculo grátis",
+			"Acesso livre ao recinto",
+			"Free entry",
+			"entrada gratis",
+			"Atividade gratuita.",
+		]) {
+			expect(detectFree(text)).toBe(true);
+		}
+	});
+
+	test("no signal is null, never false", () => {
+		for (const text of [
+			"Bilhetes a 10 euros",
+			"Concerto de verão",
+			"Entrada: 5€",
+			"",
+			null,
+			undefined,
+		]) {
+			expect(detectFree(text)).toBeNull();
+		}
+	});
+
+	test("is word-bounded", () => {
+		expect(detectFree("Gratuitamente")).toBeNull();
+		expect(detectFree("Nogratuito")).toBeNull();
+		expect(detectFree("pregratis")).toBeNull();
+	});
+
+	test("a preceding negation does not count", () => {
+		expect(detectFree("não é gratuito")).toBeNull();
+		expect(detectFree("Este evento não é gratuito.")).toBeNull();
+		expect(detectFree("Nao tem entrada livre")).toBeNull();
+		expect(detectFree("sem entrada gratuita")).toBeNull();
+	});
+
+	test("a free extra is not a free event", () => {
+		expect(detectFree("Concerto 10€. Estacionamento gratuito.")).toBeNull();
+		expect(detectFree("Wi-Fi grátis")).toBeNull();
+	});
+
+	test("free for some only is not a free event", () => {
+		expect(detectFree("Entrada gratuita para menores de 6 anos")).toBeNull();
+		expect(detectFree("Gratuito até aos 12 anos")).toBeNull();
+		expect(detectFree("Entrada livre para todos")).toBe(true);
+	});
+
+	test("a later sentence can still make it free", () => {
+		expect(detectFree("Não é gratuito para adultos. Entrada livre.")).toBe(
+			true,
+		);
+		expect(detectFree("Estacionamento gratuito. Entrada livre.")).toBe(true);
+	});
+});
+
+describe("freeFromPrices", () => {
+	test("all-positive prices are paid, in any shape", () => {
+		expect(freeFromPrices(["12,89€", "12,00€"])).toBe(false);
+		expect(freeFromPrices([5])).toBe(false);
+		expect(freeFromPrices(["25"])).toBe(false);
+		expect(freeFromPrices(["€ 7.50"])).toBe(false);
+	});
+
+	test("all-zero prices, or a Grátis label, are free", () => {
+		expect(freeFromPrices([0])).toBe(true);
+		expect(freeFromPrices(["0"])).toBe(true);
+		expect(freeFromPrices(["0,00€"])).toBe(true);
+		expect(freeFromPrices(["Grátis"])).toBe(true);
+	});
+
+	test("no price, an unreadable one, or mixed tiers is unknown", () => {
+		expect(freeFromPrices([])).toBeNull();
+		expect(freeFromPrices([null, undefined])).toBeNull();
+		expect(freeFromPrices(["a anunciar"])).toBeNull();
+		expect(freeFromPrices(["12€", "a anunciar"])).toBeNull();
+		expect(freeFromPrices([0, 10])).toBeNull();
+		expect(freeFromPrices([-1])).toBeNull();
 	});
 });

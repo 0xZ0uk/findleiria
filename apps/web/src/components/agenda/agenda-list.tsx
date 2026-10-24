@@ -3,7 +3,6 @@ import type { Agenda, AgendaRow } from "@/hooks/use-agenda";
 import { clock, hasClock, plural, shortDay } from "@/utils/format";
 import { eventHref } from "@/utils/route";
 import { EventRow } from "./event-row";
-import { GUTTER } from "./layout";
 import {
 	AgendaEmpty,
 	AgendaError,
@@ -61,7 +60,7 @@ export function AgendaList({ agenda }: { agenda: Agenda }) {
 	if (agenda.groups.length === 0) return <AgendaEmpty agenda={agenda} />;
 
 	return (
-		<div className="pt-8">
+		<div>
 			{agenda.truncated ? (
 				<TruncationNote count={agenda.rows.length} days={agenda.window.days} />
 			) : null}
@@ -70,25 +69,25 @@ export function AgendaList({ agenda }: { agenda: Agenda }) {
 				<section
 					key={group.key}
 					aria-labelledby={`dia-${group.key}`}
-					className="mt-10 first:mt-0"
+					className="mt-12 first:mt-0"
 				>
 					<h2
 						id={`dia-${group.key}`}
-						className={`${GUTTER} sticky top-0 z-10 flex items-baseline justify-between gap-4 border-border border-b bg-background/90 py-3 backdrop-blur-sm`}
+						className="sticky top-0 z-10 flex scroll-mt-4 items-baseline justify-between gap-4 border-foreground border-b bg-background/95 pt-3 pb-3 backdrop-blur-sm"
 					>
-						<span className="p443-card-title">
+						<span className="type-section text-[1.375rem] sm:text-[1.625rem]">
 							{group.label}
-							<span className="ml-2 font-mono font-normal text-[12px] text-muted-foreground tabular-nums">
+							<span className="ml-2 font-normal font-sans text-[15px] text-muted-foreground tabular-nums tracking-normal">
 								{group.date}
 							</span>
 						</span>
-						<span className="shrink-0 font-mono text-[12px] text-muted-foreground tabular-nums">
+						<span className="shrink-0 text-[14px] text-muted-foreground tabular-nums">
 							{group.events.length}{" "}
 							{plural(group.events.length, "evento", "eventos")}
 						</span>
 					</h2>
 
-					<ul className="mt-2">
+					<ul>
 						{group.events.map((event) => (
 							<EventRow
 								key={event.id}

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt" class="dark">
+<html lang="pt">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,24 +8,12 @@
       name="description"
       content="Agenda de Leiria: concertos, teatro, exposições, festas e mercados do distrito, recolhidos todos os dias das fontes originais."
     />
-    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="theme-color" content="#ffffff" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <script>
-      // Set the theme before first paint: dark unless this visitor asked for light.
-      var stored;
-      var theme;
-      try {
-        stored = localStorage.getItem("findleiria-theme") || localStorage.getItem("unreal443-theme") || localStorage.getItem("theme");
-        theme = stored === "light" ? "light" : "dark";
-        document.documentElement.classList.add(theme);
-        document.documentElement.style.colorScheme = theme;
-        document.querySelector('meta[name="theme-color"]').setAttribute("content", theme === "light" ? "#ffffff" : "#0a0a0a");
-      } catch {}
-    </script>
     <!-- Self-hosted (see public/fonts/OFL.txt). The two used above the fold are
          preloaded; font files need `crossorigin` even same-origin. -->
-    <link rel="preload" href="/fonts/karla-latin-var.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/fonts/schibsted-grotesk-latin-var.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/inter-latin-var.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/fraunces-latin-var.woff2" as="font" type="font/woff2" crossorigin />
   </head>
 
   <body>

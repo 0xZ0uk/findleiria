@@ -22,4 +22,9 @@ export interface RawEvent {
 	categories: string[];
 	imageUrl: string | null;
 	url: string;
+	/**
+	 * Free entry: true = the source says free, false = it gives a price,
+	 * null/absent = it says nothing. Never guessed.
+	 */
+	isFree?: boolean | null;
 }

@@ -1,7 +1,7 @@
 import { toEpochInLisbonOrNull } from "./fingerprint";
 import { defaultFetchText } from "./http";
 import { foldAccents, MONTH_NAME_ALT, monthFromName } from "./lib/pt-dates";
-import { decodeEntities as decodeEntitiesOnce } from "./normalize";
+import { decodeEntities as decodeEntitiesOnce, detectFree } from "./normalize";
 import type { RawEvent } from "./types";
 
 export const RSS_URL = "https://www.cm-leiria.pt/rss-feed/rss-de-eventos.rss";
@@ -373,6 +373,7 @@ function buildEvent(item: ParsedItem): ItemOutcome {
 		categories: item.categories.filter((c) => !PSEUDO_CATEGORIES.has(c)),
 		imageUrl: img,
 		url: item.link,
+		isFree: detectFree(`${item.title}. ${stripped}`),
 	};
 }
 

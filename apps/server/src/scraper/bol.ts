@@ -3,8 +3,10 @@ import * as cheerio from "cheerio";
 import { toEpochInLisbon } from "./fingerprint";
 import { defaultFetchText } from "./http";
 import { createFetchGate } from "./lib/fetch-gate";
+import { findJsonLdEvent, offerPrices } from "./lib/jsonld";
 import { monthFromName } from "./lib/pt-dates";
 import { defaultSleep, randomDelay } from "./lib/timing";
+import { freeFromPrices } from "./normalize";
 import { disambiguateSameDaySessions } from "./session-slug";
 import type { RawEvent } from "./types";
 
@@ -208,6 +210,9 @@ export function buildRawEvents(
 	detailHtml: string,
 ): RawEvent[] {
 	const venueName = slugToTitle(card.venueSlug);
+	// The detail's JSON-LD Offer carries the ticket price; no Offer, no signal.
+	const ld = findJsonLdEvent(detailHtml);
+	const isFree = ld ? freeFromPrices(offerPrices(ld)) : null;
 	return disambiguateSameDaySessions(
 		parseDetailSessions(detailHtml, card.url).map((s) => ({
 			title: slugToTitle(card.eventSlug),
@@ -221,6 +226,7 @@ export function buildRawEvents(
 			categories: [],
 			imageUrl: null,
 			url: card.url,
+			isFree,
 		})),
 	);
 }
