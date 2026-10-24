@@ -1,5 +1,5 @@
 import { db, schema } from "@events-tracker/db";
-import { and, asc, eq, gte, isNull } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, sql } from "drizzle-orm";
 
 /**
  * Shared digest core (SLICE_3). Used by the /digest Hono route and by
@@ -36,6 +36,7 @@ export interface DigestEvent {
 	when: string;
 	startAt: number;
 	url: string | null;
+	/** Every source listing the event, sorted, comma-separated; null when none. */
 	source: string | null;
 	match: boolean;
 }
@@ -72,6 +73,9 @@ export async function buildDigest(opts: DigestOptions): Promise<{
 		);
 	}
 
+	// One row per EVENT: its sources are folded into one comma-separated
+	// list. Joining event_sources directly gave a row per (event, source), so
+	// a multi-source event was listed once per source and ate the limit (C9).
 	const rows = await db
 		.select({
 			id: schema.events.id,
@@ -82,16 +86,14 @@ export async function buildDigest(opts: DigestOptions): Promise<{
 			categories: schema.events.categories,
 			venueName: schema.venues.name,
 			venueCity: schema.venues.city,
-			source: schema.eventSources.source,
+			sources: sql<
+				string | null
+			>`(SELECT group_concat(${schema.eventSources.source}, ',') FROM ${schema.eventSources} WHERE ${schema.eventSources.event_id} = ${schema.events.id})`,
 		})
 		.from(schema.events)
 		.leftJoin(schema.venues, eq(schema.events.venue_id, schema.venues.id))
-		.leftJoin(
-			schema.eventSources,
-			eq(schema.eventSources.event_id, schema.events.id),
-		)
 		.where(and(...conditions))
-		.orderBy(asc(schema.events.start_at))
+		.orderBy(asc(schema.events.start_at), asc(schema.events.id))
 		.limit(500);
 
 	const events = rows.map((r) => {
@@ -113,7 +115,9 @@ export async function buildDigest(opts: DigestOptions): Promise<{
 			when,
 			startAt: r.start_at,
 			url: r.url,
-			source: r.source,
+			source: r.sources
+				? [...new Set(r.sources.split(","))].sort().join(", ")
+				: null,
 			match: matchesKeywords(text, opts.keywords),
 		};
 	});

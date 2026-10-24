@@ -1,6 +1,8 @@
 import { normalizePlace } from "./district";
 import { toEpochInLisbon } from "./fingerprint";
 import { defaultFetchText } from "./http";
+import { monthFromName } from "./lib/pt-dates";
+import { defaultSleep, randomDelay } from "./lib/timing";
 import { loadState, saveState } from "./state";
 import type { RawEvent } from "./types";
 
@@ -63,6 +65,8 @@ export interface ScrapeResult {
 	pagesFetched: number;
 	/** Unique detail URLs discovered across listing pages. */
 	discovered: number;
+	/** Saves the new seen urls; the runner calls it after ingest (C7). */
+	commit: () => void;
 }
 
 export interface ScrapeDeps {
@@ -72,10 +76,6 @@ export interface ScrapeDeps {
 	saveState: (s: CisterState) => void;
 	now: number;
 }
-
-const defaultSleep = (ms: number) =>
-	new Promise<void>((r) => setTimeout(r, ms));
-const randomDelay = () => 350 + Math.floor(Math.random() * 300);
 
 /** Unique `/salaodefestas/<slug>/` urls on a listing page. */
 export function parseListingLinks(html: string): string[] {
@@ -136,21 +136,6 @@ export function parseDetailCard(html: string): {
 	return { title, dateText, venue };
 }
 
-const MONTHS: Record<string, number> = {
-	janeiro: 1,
-	fevereiro: 2,
-	marco: 3,
-	abril: 4,
-	maio: 5,
-	junho: 6,
-	julho: 7,
-	agosto: 8,
-	setembro: 9,
-	outubro: 10,
-	novembro: 11,
-	dezembro: 12,
-};
-
 interface ParsedRange {
 	startDay: number;
 	endDay: number;
@@ -171,7 +156,7 @@ export function parseDateRange(text: string): ParsedRange | null {
 	if (m) {
 		if (m[3]) {
 			// two-day range: 4 a 7 de Setembro
-			const month = MONTHS[(m[3] ?? "").replace(/ç/g, "c")];
+			const month = monthFromName(m[3] ?? "");
 			if (month != null) {
 				return {
 					startDay: Number(m[1]),
@@ -181,7 +166,7 @@ export function parseDateRange(text: string): ParsedRange | null {
 			}
 		}
 		// single-day: 4 de Setembro (m[1]=day, m[2]=month)
-		const month = MONTHS[(m[2] ?? "").replace(/ç/g, "c")];
+		const month = monthFromName(m[2] ?? "");
 		if (month != null) {
 			return { startDay: Number(m[1]), endDay: Number(m[1]), month };
 		}
@@ -317,6 +302,12 @@ export async function scrape(
 			break; // listings are sequential; a gap stops discovery
 		}
 		const found = parseListingLinks(html);
+		if (page === 1 && found.length === 0) {
+			// Zero links at all (not zero NEW links, which is steady state) means
+			// broken markup or a challenge page, not a quiet day.
+			failures++;
+			firstError ??= `${url}: listing parsed to zero links`;
+		}
 		let novel = 0;
 		for (const u of found) {
 			if (!discovered.has(u)) {
@@ -336,6 +327,11 @@ export async function scrape(
 	// Fetch details only for urls we've never seen.
 	const events: RawEvent[] = [];
 	const detailUrls = [...discovered.keys()];
+	// Urls to mark seen once ingest commits (C7): a detail that was fetched
+	// and either emitted, out of district, or a past festa. A failed fetch, a
+	// page with no title, and a url the request cap skipped all stay unseen
+	// and are retried next run.
+	const handled: string[] = [];
 	for (const u of detailUrls) {
 		if (seen.has(u)) {
 			continue;
@@ -351,6 +347,11 @@ export async function scrape(
 			const card = parseDetailCard(html);
 			const raw = toRawEvent(u, card, deps.now);
 			const gate = card.venue || card.title;
+			// toRawEvent only drops a titled card when no year fits its dates
+			// (a past festa): a deliberate skip, unlike a page with no title.
+			if (raw || card.title?.trim() || card.venue?.trim()) {
+				handled.push(u);
+			}
 			if (raw && isInScope(gate)) {
 				events.push(raw);
 			}
@@ -362,13 +363,13 @@ export async function scrape(
 		}
 	}
 
-	deps.saveState({ seen: [...new Set([...state.seen, ...detailUrls])] });
-
 	return {
 		events,
 		failures,
 		firstError,
 		pagesFetched,
 		discovered: discovered.size,
+		commit: () =>
+			deps.saveState({ seen: [...new Set([...state.seen, ...handled])] }),
 	};
 }

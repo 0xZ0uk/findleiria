@@ -1,6 +1,10 @@
 import * as cheerio from "cheerio";
 
 import { toEpochInLisbon } from "./fingerprint";
+import { defaultFetchText } from "./http";
+import { createFetchGate } from "./lib/fetch-gate";
+import { monthFromName } from "./lib/pt-dates";
+import { defaultSleep, randomDelay } from "./lib/timing";
 import type { RawEvent } from "./types";
 
 const SITE = "https://leiriagenda.cm-leiria.pt";
@@ -12,21 +16,6 @@ export const MAX_REQUESTS = 400;
 export const MIN_DELAY_MS = 300;
 export const MAX_DELAY_MS = 500;
 export const DETAIL_CONCURRENCY = 4;
-
-const PT_MONTHS: Record<string, number> = {
-	jan: 1,
-	fev: 2,
-	mar: 3,
-	abr: 4,
-	mai: 5,
-	jun: 6,
-	jul: 7,
-	ago: 8,
-	set: 9,
-	out: 10,
-	nov: 11,
-	dez: 12,
-};
 
 /** A listing-page event card (the coarse fields available without detail). */
 export interface ListingCard {
@@ -74,7 +63,7 @@ export function parseDateNode(
 	const day = Number.parseInt(el.find(".dia").first().text(), 10);
 	const mesText = el.find(".mes").first().text();
 	const monthAbbr = mesText.match(/[a-z]{3}/i)?.[0] ?? "";
-	const month = PT_MONTHS[monthAbbr.toLowerCase()];
+	const month = monthFromName(monthAbbr);
 	const anoEl = el.find(".ano").first().text();
 	const year =
 		Number.parseInt(anoEl, 10) ||
@@ -238,53 +227,6 @@ export interface ScrapeDeps {
 	sleep: (ms: number) => Promise<void>;
 }
 
-const FETCH_TIMEOUT_MS = 15000;
-const FETCH_RETRIES = 2;
-const RETRY_BACKOFF_MS = 800;
-
-/**
- * Fetch with a hard timeout and bounded retries. 4xx responses are terminal;
- * network errors, timeouts and 5xx are retried.
- */
-async function defaultFetchText(url: string): Promise<string> {
-	let lastError: unknown;
-	for (let attempt = 0; attempt <= FETCH_RETRIES; attempt++) {
-		if (attempt > 0) {
-			await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS * attempt));
-		}
-		try {
-			const res = await fetch(url, {
-				signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-			});
-			if (!res.ok) {
-				const err = new Error(`GET ${url} -> HTTP ${res.status}`);
-				if (res.status < 500) {
-					throw Object.assign(err, { retryable: false });
-				}
-				throw Object.assign(err, { retryable: true });
-			}
-			return res.text();
-		} catch (err) {
-			lastError = err;
-			if (
-				err &&
-				typeof err === "object" &&
-				"retryable" in err &&
-				err.retryable === false
-			) {
-				throw err;
-			}
-		}
-	}
-	throw lastError;
-}
-
-const defaultSleep = (ms: number) =>
-	new Promise<void>((r) => setTimeout(r, ms));
-
-const randomDelay = () =>
-	MIN_DELAY_MS + Math.floor(Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS + 1));
-
 export interface ScrapeResult {
 	events: RawEvent[];
 	/** Cards that could not be fetched/parsed; run continues without them. */
@@ -301,24 +243,13 @@ export interface ScrapeResult {
 export async function scrape(
 	deps: ScrapeDeps = { fetchText: defaultFetchText, sleep: defaultSleep },
 ): Promise<ScrapeResult> {
-	let requests = 0;
-	// Serial fetch gate: increment + fetch are mutually exclusive, so the
-	// request cap is exact even with concurrent workers.
-	let chain: Promise<unknown> = Promise.resolve();
-	const fetchPage = (url: string): Promise<string> => {
-		const next = chain.then(async () => {
-			if (requests >= MAX_REQUESTS) {
-				throw new Error(`request cap ${MAX_REQUESTS} reached`);
-			}
-			requests++;
-			await deps.sleep(randomDelay());
-			return deps.fetchText(url);
-		});
-		// Swallow to keep the chain alive for queued callers; their own await
-		// still sees the original error.
-		chain = next.catch(() => {});
-		return next;
-	};
+	// Serial fetch gate: the request cap is exact even with concurrent workers.
+	const { fetchPage, capReached } = createFetchGate({
+		fetchText: deps.fetchText,
+		sleep: deps.sleep,
+		maxRequests: MAX_REQUESTS,
+		delay: () => randomDelay(MIN_DELAY_MS, MAX_DELAY_MS - MIN_DELAY_MS + 1),
+	});
 
 	const firstHtml = await fetchPage(LISTING_URL);
 	const maxPage = Math.min(maxPageFromHtml(firstHtml), MAX_PAGES);
@@ -328,7 +259,7 @@ export async function scrape(
 		cardsBySlug.set(card.slug, card);
 	}
 	for (let page = 2; page <= maxPage; page++) {
-		if (requests >= MAX_REQUESTS) break;
+		if (capReached()) break;
 		try {
 			const html = await fetchPage(`${LISTING_URL}?page=${page}`);
 			for (const card of parseListing(html)) {

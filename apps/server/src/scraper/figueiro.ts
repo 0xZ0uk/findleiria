@@ -1,6 +1,8 @@
 import { errorMessage } from "./errors";
 import { toEpochInLisbonOrNull } from "./fingerprint";
 import { defaultFetchText } from "./http";
+import { foldAccents, monthFromName } from "./lib/pt-dates";
+import { defaultSleep } from "./lib/timing";
 import { plainText } from "./normalize";
 import type { RawEvent } from "./types";
 
@@ -95,45 +97,6 @@ export interface ScrapeDeps {
 	now: number;
 }
 
-const defaultSleep = (ms: number) =>
-	new Promise<void>((r) => setTimeout(r, ms));
-
-/** PT month names as com_djevents publishes them (full + 3-letter forms). */
-const PT_MONTHS: Record<string, number> = {
-	janeiro: 1,
-	fevereiro: 2,
-	marco: 3,
-	abril: 4,
-	maio: 5,
-	junho: 6,
-	julho: 7,
-	agosto: 8,
-	setembro: 9,
-	outubro: 10,
-	novembro: 11,
-	dezembro: 12,
-	jan: 1,
-	fev: 2,
-	mar: 3,
-	abr: 4,
-	mai: 5,
-	jun: 6,
-	jul: 7,
-	ago: 8,
-	set: 9,
-	out: 10,
-	nov: 11,
-	dez: 12,
-};
-
-const fold = (s: string) =>
-	s
-		.normalize("NFD")
-		.replace(/[\u0300-\u036f]/g, "")
-		.toLowerCase()
-		.replace(/[.\s]+$/, "")
-		.trim();
-
 /**
  * Parse a com_djevents long-form date: "Sábado, 19 setembro 2026 at 18:30",
  * "quinta, 31 dezembro 2026", "1 janeiro 2025 às 10h00". Returns null when the
@@ -150,7 +113,7 @@ export function parseDjevDate(raw: string): DateParts | null {
 		return null;
 	}
 	const monthName = m[2] ?? "";
-	const month = PT_MONTHS[fold(monthName)];
+	const month = monthFromName(monthName);
 	if (!month) {
 		return null;
 	}
@@ -342,7 +305,10 @@ export function toRawEvent(
 			venueName: city,
 			city,
 			categories:
-				category && fold(category) !== SECTION_LABEL ? [category] : [],
+				category &&
+				foldAccents(category).replace(/[.\s]+$/, "") !== SECTION_LABEL
+					? [category]
+					: [],
 			imageUrl: item.imageUrl,
 			url: absolute(item.href),
 		},
@@ -376,6 +342,12 @@ export async function scrape(
 	}
 
 	const items = html ? parseItems(html) : [];
+	if (html && items.length === 0) {
+		// The agenda page is fetched but parses to zero items: broken markup or a
+		// challenge page, not a quiet day (a failed fetch is already counted).
+		failures++;
+		firstError ??= `${url}: listing parsed to zero items`;
+	}
 	const events: RawEvent[] = [];
 	const seenSlugs = new Set<string>();
 	let droppedOutOfDistrict = 0;

@@ -1,5 +1,7 @@
 import { toEpochInLisbonOrNull } from "./fingerprint";
 import { defaultFetchText } from "./http";
+import { foldAccents, MONTH_NAME_ALT, monthFromName } from "./lib/pt-dates";
+import { decodeEntities as decodeEntitiesOnce } from "./normalize";
 import type { RawEvent } from "./types";
 
 export const RSS_URL = "https://www.cm-leiria.pt/rss-feed/rss-de-eventos.rss";
@@ -14,39 +16,6 @@ const PSEUDO_CATEGORIES = new Set([
 	"Newsletter | Evento Destaque",
 	"Newsletter | Eventos Listagem",
 ]);
-
-const PT_MONTHS: Record<string, number> = {
-	janeiro: 1,
-	fevereiro: 2,
-	marco: 3,
-	março: 3,
-	abril: 4,
-	maio: 5,
-	junho: 6,
-	julho: 7,
-	agosto: 8,
-	setembro: 9,
-	outubro: 10,
-	novembro: 11,
-	dezembro: 12,
-	// Abbreviations (longest-first matching is handled by sort below).
-	jan: 1,
-	fev: 2,
-	mar: 3,
-	abr: 4,
-	mai: 5,
-	jun: 6,
-	jul: 7,
-	ago: 8,
-	set: 9,
-	out: 10,
-	nov: 11,
-	dez: 12,
-};
-// Longest names first so "setembro" wins over "set" in alternation.
-const MONTH_ALT = Object.keys(PT_MONTHS)
-	.sort((a, b) => b.length - a.length)
-	.join("|");
 
 /** Venue strings that mean "not announced yet" — fall back to the default. */
 const JUNK_VENUES = new Set(["a confirmar", "a definir", "a anunciar"]);
@@ -63,14 +32,6 @@ export interface ParsedDate {
 interface TimeToken {
 	hour: number;
 	minute: number;
-}
-
-/** Strip diacritics + lowercase so accented text matches ASCII month names. */
-function foldText(s: string): string {
-	return s
-		.normalize("NFD")
-		.replace(/[\u0300-\u036f]/g, "")
-		.toLowerCase();
 }
 
 /** A time token (HHhMM / HHh) within `limit` chars of `from`? */
@@ -137,7 +98,7 @@ export function extractDate(
 	text: string,
 	refMs: number = Date.now(),
 ): ParsedDate | null {
-	const norm = foldText(text);
+	const norm = foldAccents(text);
 	const matches: DateMatch[] = [];
 	let order = 0;
 
@@ -145,11 +106,11 @@ export function extractDate(
 	// specific form wins outright, so the infer-year branch never sees it.
 	for (const m of norm.matchAll(
 		new RegExp(
-			`\\b(\\d{1,2})(?:\\s+de)?\\s+(${MONTH_ALT})\\s+de?\\s*(\\d{4})\\b(?:\\s+as?\\s*(\\d{1,2})h(\\d{2})?)?`,
+			`\\b(\\d{1,2})(?:\\s+de)?\\s+(${MONTH_NAME_ALT})\\s+de?\\s*(\\d{4})\\b(?:\\s+as?\\s*(\\d{1,2})h(\\d{2})?)?`,
 			"g",
 		),
 	)) {
-		const month = PT_MONTHS[m[2] ?? ""];
+		const month = monthFromName(m[2] ?? "");
 		if (month == null) {
 			continue;
 		}
@@ -168,7 +129,7 @@ export function extractDate(
 	}
 
 	const dayMonthRe = new RegExp(
-		`(\\d{1,2}(?:\\s*[,e]+\\s*\\d{1,2})*)\\s*(?:de\\s+)?(${MONTH_ALT})(?![\\p{L}\\u00C0-\\u024F])(?!\\s*(?:de\\s*)?\\d{4})`,
+		`(\\d{1,2}(?:\\s*[,e]+\\s*\\d{1,2})*)\\s*(?:de\\s+)?(${MONTH_NAME_ALT})(?![\\p{L}\\u00C0-\\u024F])(?!\\s*(?:de\\s*)?\\d{4})`,
 		"g",
 	);
 	for (const m of norm.matchAll(dayMonthRe)) {
@@ -177,7 +138,7 @@ export function extractDate(
 		if (dayNum == null) {
 			continue;
 		}
-		const month = PT_MONTHS[m[2] ?? ""];
+		const month = monthFromName(m[2] ?? "");
 		if (month == null) {
 			continue;
 		}
@@ -212,9 +173,9 @@ export function extractDate(
 	// Explicit-year short form (and the reviewer's explicit-year test case);
 	// also reads a trailing time token when present.
 	for (const m of norm.matchAll(
-		new RegExp(`\\b(\\d{1,2})\\s+(${MONTH_ALT})\\s+(\\d{4})\\b`, "g"),
+		new RegExp(`\\b(\\d{1,2})\\s+(${MONTH_NAME_ALT})\\s+(\\d{4})\\b`, "g"),
 	)) {
-		const month = PT_MONTHS[m[2] ?? ""];
+		const month = monthFromName(m[2] ?? "");
 		if (month == null) {
 			continue;
 		}
@@ -257,7 +218,9 @@ export function extractDate(
 
 /** The sentence fragment mentioning a date, when no full date patterns hit. */
 export function extractDateText(text: string): string | null {
-	const m = text.match(new RegExp(`[^.!?]*\\b(?:${MONTH_ALT})\\b[^.!?]*`, "i"));
+	const m = text.match(
+		new RegExp(`[^.!?]*\\b(?:${MONTH_NAME_ALT})\\b[^.!?]*`, "i"),
+	);
 	if (!m || m[0] == null) {
 		return null;
 	}
@@ -348,80 +311,16 @@ export function parseItems(xml: string): ParsedItem[] {
 /**
  * Decode HTML entities WITHOUT cheerio's serializer round-trip, which mangles
  * astral-plane characters (emoji like 📌 arrive as lone surrogate halves).
- * The feed XML-escapes an inner HTML document, so entities are decoded twice;
- * numeric (dec/hex) forms included.
+ * The feed XML-escapes an inner HTML document, so entities are decoded twice
+ * through the canonical decoder (`./normalize`: named, decimal and hex forms;
+ * UTF-16 surrogate halves emitted as separate entities re-join into the
+ * emoji). Curly quotes then fold to straight ones, the form this feed's
+ * titles and descriptions have always used.
  */
-const NAMED_ENTITIES: Record<string, string> = {
-	"&amp;": "&",
-	"&lt;": "<",
-	"&gt;": ">",
-	"&quot;": '"',
-	"&#39;": "'",
-	"&apos;": "'",
-	"&nbsp;": " ",
-	"&aacute;": "á",
-	"&eacute;": "é",
-	"&iacute;": "í",
-	"&oacute;": "ó",
-	"&uacute;": "ú",
-	"&atilde;": "ã",
-	"&otilde;": "õ",
-	"&ccedil;": "ç",
-	"&acirc;": "â",
-	"&ecirc;": "ê",
-	"&ocirc;": "ô",
-	"&agrave;": "à",
-	"&laquo;": "«",
-	"&raquo;": "»",
-	"\u201C": '"',
-	"\u201D": '"',
-	"\u2018": "'",
-	"\u2019": "'",
-	"&hellip;": "…",
-	"&mdash;": "—",
-	"&ndash;": "–",
-};
-
-function decodeEntitiesOnce(s: string): string {
-	let out = s;
-	for (const [token, value] of Object.entries(NAMED_ENTITIES)) {
-		out = out.split(token).join(value);
-	}
-	// Numeric entities. Naive fromCodePoint per match breaks when a source
-	// emits astral chars as UTF-16 code-unit entities (high+low separately):
-	// combining them here keeps emoji intact instead of splitting pairs.
-	let pendingHigh = -1;
-	out = out.replace(
-		/&#(x[0-9a-f]+|\d+);/gi,
-		(full: string, n: string): string => {
-			const code = n.toLowerCase().startsWith("x")
-				? Number.parseInt(n.slice(1), 16)
-				: Number.parseInt(n, 10);
-			if (!Number.isSafeInteger(code) || code <= 0 || code > 0x10ffff) {
-				return full;
-			}
-			if (code >= 0xd800 && code <= 0xdbff) {
-				pendingHigh = code;
-				return "";
-			}
-			if (code >= 0xdc00 && code <= 0xdfff) {
-				if (pendingHigh !== -1) {
-					const combined =
-						0x10000 + ((pendingHigh - 0xd800) << 10) + (code - 0xdc00);
-					pendingHigh = -1;
-					return String.fromCodePoint(combined);
-				}
-				return full; // lone low surrogate — leave as-is, don't corrupt
-			}
-			pendingHigh = -1;
-			return String.fromCodePoint(code);
-		},
-	);
-	return out;
-}
-
 function decodeEntities(s: string): string {
-	return decodeEntitiesOnce(decodeEntitiesOnce(s));
+	return decodeEntitiesOnce(decodeEntitiesOnce(s))
+		.replace(/[\u201C\u201D]/g, '"')
+		.replace(/[\u2018\u2019]/g, "'");
 }
 
 interface ScrapeDeps {

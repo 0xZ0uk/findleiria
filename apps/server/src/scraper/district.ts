@@ -135,6 +135,16 @@ const ALL_PARISHES: readonly string[] = [
 	...new Set<string>([...KNOWN_PARISHES, ...DISTRICT_PARISHES]),
 ];
 
+/**
+ * Every normalized place name that marks a string as district: the 16
+ * municipalities plus all known freguesias/lugares. Exposed for callers that
+ * need to RANK candidates by district likelihood (festasearraiais URL slugs)
+ * instead of gate them one by one.
+ */
+export const DISTRICT_PLACE_NAMES: readonly string[] = [
+	...new Set<string>([...LEIRIA_DISTRICT_MUNICIPALITIES, ...ALL_PARISHES]),
+];
+
 function isKnownParish(norm: string): boolean {
 	return ALL_PARISHES.includes(norm);
 }

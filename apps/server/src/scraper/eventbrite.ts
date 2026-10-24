@@ -1,6 +1,7 @@
 import { isLeiriaDistrict } from "./district";
-import { toEpochInLisbonOrNull } from "./fingerprint";
 import { defaultFetchText } from "./http";
+import { ymdToEpoch } from "./lib/pt-dates";
+import { defaultSleep, randomDelay } from "./lib/timing";
 import type { RawEvent } from "./types";
 
 /**
@@ -31,10 +32,6 @@ interface ScrapeDeps {
 	fetchText: (url: string) => Promise<string>;
 	sleep: (ms: number) => Promise<void>;
 }
-
-const defaultSleep = (ms: number) =>
-	new Promise<void>((r) => setTimeout(r, ms));
-const randomDelay = () => 400 + Math.floor(Math.random() * 200);
 
 /** Extract the `window.__SERVER_DATA__` JSON object from an Eventbrite page. */
 export function extractServerData(html: string): unknown | null {
@@ -120,27 +117,6 @@ export function collectEvents(data: unknown): EbEvent[] {
 	return out;
 }
 
-function parseIsoDate(
-	date: string | undefined,
-	time: string | undefined,
-): number | null {
-	if (!date) {
-		return null;
-	}
-	const m = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
-	if (!m) {
-		return null;
-	}
-	const tm = time?.match(/^(\d{1,2}):(\d{2})/) ?? null;
-	return toEpochInLisbonOrNull(
-		Number.parseInt(m[1] ?? "0", 10),
-		Number.parseInt(m[2] ?? "0", 10),
-		Number.parseInt(m[3] ?? "0", 10),
-		tm ? Number.parseInt(tm[1] ?? "0", 10) : 0,
-		tm ? Number.parseInt(tm[2] ?? "0", 10) : 0,
-	);
-}
-
 function eventName(e: EbEvent): string {
 	const n = e.name;
 	if (typeof n === "string") {
@@ -152,8 +128,8 @@ function eventName(e: EbEvent): string {
 /** True when a date field is present but names a day that cannot exist. */
 function hasImpossibleDate(e: EbEvent): boolean {
 	return (
-		(!!e.start_date && parseIsoDate(e.start_date, e.start_time) == null) ||
-		(!!e.end_date && parseIsoDate(e.end_date, e.end_time) == null)
+		(!!e.start_date && ymdToEpoch(e.start_date, e.start_time) == null) ||
+		(!!e.end_date && ymdToEpoch(e.end_date, e.end_time) == null)
 	);
 }
 
@@ -167,11 +143,11 @@ export function toRawEvent(e: EbEvent): RawEvent | null {
 	if (e.is_cancelled || e.is_online_event) {
 		return null;
 	}
-	const startAt = parseIsoDate(e.start_date, e.start_time);
+	const startAt = ymdToEpoch(e.start_date, e.start_time);
 	if (startAt == null) {
 		return null;
 	}
-	const endAt = parseIsoDate(e.end_date, e.end_time);
+	const endAt = ymdToEpoch(e.end_date, e.end_time);
 	if (e.end_date && endAt == null) {
 		return null; // end names a day that cannot exist → skip the item
 	}
@@ -214,12 +190,22 @@ export async function scrape(
 	for (let page = 1; page <= MAX_PAGES; page++) {
 		const url = page === 1 ? LISTING_URL : `${LISTING_URL}?page=${page}`;
 		try {
-			await deps.sleep(randomDelay());
+			await deps.sleep(randomDelay(400, 200));
 			const html = await deps.fetchText(url);
 			pagesFetched++;
 			const data = extractServerData(html);
 			const events = data ? collectEvents(data) : [];
 			if (events.length === 0) {
+				if (page === 1) {
+					// Page 1 of the listing always carries events: a missing
+					// __SERVER_DATA__ blob (markup change / challenge page) or an
+					// empty roster is a failure, not a quiet day. Later empty pages
+					// are just the end of pagination.
+					failures++;
+					firstError ??= data
+						? `${url}: listing page 1 has no events`
+						: `${url}: __SERVER_DATA__ not found`;
+				}
 				break;
 			}
 			for (const e of events) {

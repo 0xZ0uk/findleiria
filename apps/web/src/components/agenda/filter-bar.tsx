@@ -8,10 +8,24 @@ import {
 	Search,
 	X,
 } from "lucide-react";
-import { useCallback, useId, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import type { Agenda, Facet } from "@/hooks/use-agenda";
 import { BUTTON, FIELD, LABEL, MICRO } from "./layout";
 import { EventCount } from "./states";
+
+/**
+ * `value`, but only once it has held still for `delay` ms. The live region
+ * reads this, so a screen reader hears where typing settled rather than every
+ * keystroke's intermediate count.
+ */
+function useSettled<T>(value: T, delay: number): T {
+	const [settled, setSettled] = useState(value);
+	useEffect(() => {
+		const timer = setTimeout(() => setSettled(value), delay);
+		return () => clearTimeout(timer);
+	}, [value, delay]);
+	return settled;
+}
 
 const CHEVRON =
 	"pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground";
@@ -238,6 +252,8 @@ export function FilterBar({ agenda }: { agenda: Agenda }) {
 	const id = useId();
 	const { filters, facets, rangeBounds } = agenda;
 
+	const announcedShown = useSettled(agenda.visible.length, 600);
+
 	const searchId = `${id}-q`;
 	const facetsId = `${id}-facets`;
 
@@ -248,7 +264,7 @@ export function FilterBar({ agenda }: { agenda: Agenda }) {
 			</h2>
 
 			<div className="flex flex-wrap items-end gap-3">
-				<div className="min-w-0 flex-1 sm:flex-none sm:basis-[calc((200%_-_12px)/3)] lg:basis-[calc((200%_-_60px)/7)]">
+				<div className="min-w-0 flex-none basis-full sm:basis-[calc((200%_-_12px)/3)] lg:basis-[calc((200%_-_60px)/7)]">
 					<label htmlFor={searchId} className={LABEL}>
 						Procurar
 					</label>
@@ -352,13 +368,22 @@ export function FilterBar({ agenda }: { agenda: Agenda }) {
 			</div>
 
 			<div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+				{/* The visible count updates live; screen readers get the settled one
+				    through the status region below, so typing does not spam them. */}
 				<p
-					role="status"
+					aria-hidden="true"
 					className="font-mono text-[12px] text-muted-foreground tabular-nums"
 				>
 					<EventCount
 						total={agenda.rows.length}
 						shown={agenda.visible.length}
+						days={agenda.window.days}
+					/>
+				</p>
+				<p role="status" className="sr-only">
+					<EventCount
+						total={agenda.rows.length}
+						shown={announcedShown}
 						days={agenda.window.days}
 					/>
 				</p>

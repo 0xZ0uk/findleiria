@@ -1,7 +1,6 @@
 /* ============================================================
-   Porta443 mechanism layer for findleiria (redesign/p443-brand)
-   Source of truth: /root/porta443-brand/DESIGN.md — tokens mirrored
-   here so the app resolves them without a runtime dependency.
+   Porta443 mechanism layer for findleiria (redesign/p443-brand).
+   The tokens are defined here; DESIGN.md at the repo root describes them.
    Single chromatic driver: amber #FF8C00. Sharp corners 0–4px.
    Schibsted Grotesk (display) / Karla (body). Dark-first.
    NOTE: fonts are imported in apps/web/index.html (a @import here
@@ -9,7 +8,7 @@
    ============================================================ */
 
 :root {
-	/* ── Porta443 core palette (DESIGN.md `colors:`) ── */
+	/* ── Porta443 core palette ── */
 	--p443-primary: #ff8c00; /* amber — the only colour */
 	--p443-on-primary: #1a1a1a; /* near-black on amber fills */
 	--p443-primary-hover: #ffa133;
@@ -66,8 +65,8 @@
 	--color-ring: var(--ring);
 }
 
-/* ── shadcn token map → Porta443 (default = dark canvas; the `.dark`
-   class carries the LIGHT inversion, matching next-themes semantics) ── */
+/* ── shadcn token map → Porta443 (default = dark canvas; `.dark` is the
+   same dark set, and `.light` carries the inversion below) ── */
 :root,
 .dark {
 	--background: var(--p443-canvas);
@@ -124,7 +123,7 @@
 	}
 }
 
-/* ── Type utilities (DESIGN.md typography scale) ── */
+/* ── Type utilities ── */
 @utility p443-display {
 	font-family: var(--p443-font-display);
 	font-size: clamp(40px, 5vw, 64px);

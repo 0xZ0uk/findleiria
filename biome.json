@@ -21,7 +21,6 @@
 			"!apps/web/src/env.d.ts",
 			"!**/src-tauri",
 			"!**/.nuxt",
-			"!bts.jsonc",
 			"!**/.expo",
 			"!**/.wrangler",
 			"!**/.alchemy",

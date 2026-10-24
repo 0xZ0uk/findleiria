@@ -96,6 +96,13 @@ export const eventSources = sqliteTable(
 		source_url: text("source_url"),
 		/** Epoch seconds (UTC) when this source first reported the event. */
 		first_seen_at: integer("first_seen_at").notNull(),
+		/**
+		 * Epoch seconds (UTC) of the last ingest whose listing named this
+		 * event (C5). Lets the scraper prune rows a full-listing source has
+		 * stopped publishing (cancelled / moved). Null = never tracked, which
+		 * is never pruned.
+		 */
+		last_seen_at: integer("last_seen_at"),
 	},
 	(table) => [
 		uniqueIndex("event_sources_event_id_source_unique").on(
@@ -106,6 +113,38 @@ export const eventSources = sqliteTable(
 			table.source,
 			table.source_event_id,
 		),
+	],
+);
+
+/**
+ * EventAlias — a source item whose row reconcile folded into another event
+ * (C6). The keeper already carries an attribution from that source (one per
+ * source per event), so the absorbed item's own attribution cannot move onto
+ * it; without this record the next scrape no longer recognises the item,
+ * re-inserts it and reconcile absorbs it again, every run. Ingest resolves
+ * aliases before minting a row. Scraper bookkeeping only: never published to
+ * Turso (see publish-turso.ts).
+ */
+export const eventAliases = sqliteTable(
+	"event_aliases",
+	{
+		id: integer("id").primaryKey({ autoIncrement: true }),
+		source: text("source").notNull(),
+		source_event_id: text("source_event_id").notNull(),
+		/** The surviving (keeper) event the item now resolves to. */
+		event_id: integer("event_id")
+			.notNull()
+			.references(() => events.id, { onDelete: "cascade" }),
+		/** Epoch seconds (UTC) when the alias was recorded. */
+		created_at: integer("created_at").notNull(),
+	},
+	(table) => [
+		uniqueIndex("event_aliases_source_item_event_unique").on(
+			table.source,
+			table.source_event_id,
+			table.event_id,
+		),
+		index("event_aliases_event_id_idx").on(table.event_id),
 	],
 );
 
@@ -125,6 +164,21 @@ export const scrapeRuns = sqliteTable(
 		items_new: integer("items_new").notNull().default(0),
 		items_failed: integer("items_failed").notNull().default(0),
 		error: text("error"),
+		/**
+		 * Items the source's listing showed (pre-gate, already-seen ones
+		 * included); null when the source does not report it. 0 on a source
+		 * that normally lists dozens = broken parser, not a quiet day.
+		 */
+		items_discovered: integer("items_discovered"),
+		/** Pages the scrape fetched; null when the source does not report it. */
+		pages_fetched: integer("pages_fetched"),
+		items_updated: integer("items_updated").notNull().default(0),
+		/** Rows pruned because this full-listing source stopped listing them. */
+		items_pruned: integer("items_pruned").notNull().default(0),
+		/** Non-fatal notes, e.g. the prune circuit breaker refusing. */
+		warnings: text("warnings"),
+		/** The batch's post-pass (purge/venue merge/reconcile) failures. */
+		postpass_error: text("postpass_error"),
 	},
 	(table) => [
 		index("scrape_runs_source_started_at_idx").on(

@@ -1,4 +1,6 @@
 import { defaultFetchText } from "./http";
+import { findJsonLdEvent } from "./lib/jsonld";
+import { defaultSleep, randomDelay } from "./lib/timing";
 import type { RawEvent } from "./types";
 
 /**
@@ -47,10 +49,6 @@ export interface ScrapeDeps {
 	sleep: (ms: number) => Promise<void>;
 }
 
-const defaultSleep = (ms: number) =>
-	new Promise<void>((r) => setTimeout(r, ms));
-const randomDelay = () => 500 + Math.floor(Math.random() * 700);
-
 interface EventLd {
 	"@type"?: string | string[];
 	name?: string;
@@ -71,21 +69,7 @@ interface EventLd {
 
 /** Extract the schema.org Event/MusicEvent JSON-LD object from a detail page. */
 export function parseDetailLd(html: string): EventLd | null {
-	const blocks = [
-		...html.matchAll(
-			/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g,
-		),
-	];
-	for (const m of blocks) {
-		try {
-			const d = JSON.parse(m[1] ?? "") as EventLd;
-			const t = Array.isArray(d["@type"]) ? d["@type"][0] : d["@type"];
-			if (t && /Event$/.test(t) && t !== "BreadcrumbList" && t !== "ItemList") {
-				return d;
-			}
-		} catch {}
-	}
-	return null;
+	return findJsonLdEvent<EventLd>(html);
 }
 
 /** Slug for a RawEvent from the listing slug (already URL-safe). */
@@ -177,7 +161,7 @@ export async function scrape(
 			throw new Error(`request cap ${MAX_REQUESTS} reached`);
 		}
 		requests++;
-		await deps.sleep(randomDelay());
+		await deps.sleep(randomDelay(500, 700));
 		return deps.fetchText(url);
 	};
 
@@ -192,6 +176,18 @@ export async function scrape(
 			events: [],
 			failures: failures + 1,
 			firstError: err instanceof Error ? err.message : String(err),
+			pagesFetched,
+			listedSlugs,
+		};
+	}
+
+	if (listedSlugs.length === 0) {
+		// A Vercel checkpoint / challenge page is served with HTTP 200 and parses
+		// to nothing: the region listing is never really empty, so report it.
+		return {
+			events: [],
+			failures: failures + 1,
+			firstError: `${REGION_URL}: listing parsed to zero events (checkpoint or markup change?)`,
 			pagesFetched,
 			listedSlugs,
 		};

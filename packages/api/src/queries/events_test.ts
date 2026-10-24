@@ -1,12 +1,24 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
+import { schema } from "@events-tracker/db/client";
+
+import {
+	createTestDb,
+	DAY,
+	event,
+	insertEvents,
+	NOW,
+	type TestDb,
+} from "../test-db";
 import {
 	type Db,
 	eventBySlug,
 	eventDirectory,
+	eventStats,
 	eventsBySlugs,
 	listEvents,
 	listInput,
+	undatedEvents,
 	WINDOW_MAX,
 } from "./events";
 
@@ -42,165 +54,303 @@ describe("listInput", () => {
 });
 
 /**
- * Chainable stand-in for the drizzle client. These cover what the queries hand
- * back — mapping and the not-found contract — not the SQL itself, which the
- * build-time prerender exercises for real against the live database.
+ * Everything below runs the real SQL against a libSQL file with the committed
+ * migrations applied. The undated rows are inserted so that id order and
+ * start order disagree, which makes the `desc(id)` ordering observable.
  */
-function stubDb(rows: Record<string, unknown>[]): Db {
-	const chain: Record<string, unknown> = {
-		orderBy: () => Promise.resolve(rows),
-		limit: () => Promise.resolve(rows),
-	};
+let t: TestDb;
+let db: Db;
 
-	chain.select = () => chain;
-	chain.from = () => chain;
-	chain.leftJoin = () => chain;
-	chain.where = () => chain;
+const list = (input: Parameters<typeof listInput.parse>[0] = {}) =>
+	listEvents(db, listInput.parse(input));
+const slugs = (rows: { slug: string }[]) => rows.map((r) => r.slug);
 
-	return chain as unknown as Db;
-}
+beforeAll(async () => {
+	t = await createTestDb("findleiria-events-");
+	db = t.db;
 
-const detailRow = {
-	id: 7,
-	title: "Concerto de Verão",
-	slug: "concerto-de-verao",
-	start_at: 1_790_000_000,
-	end_at: null,
-	venue_id: 3,
-	image_url: null,
-	url: "https://exemplo.pt/concerto",
-	categories: ["Música"],
-	date_text: null,
-	venueName: "Teatro José Lúcio da Silva",
-	venueCity: "Leiria",
-	venueSlug: "teatro-jose-lucio-da-silva",
-	venueLat: 39.7467,
-	venueLng: -8.8039,
-	venueScope: "venue",
-	description: "Uma noite de música no centro da cidade.",
-	updated_at: 1_789_000_000,
-};
+	await db.insert(schema.venues).values([
+		{
+			id: 1,
+			name: "Teatro José Lúcio da Silva",
+			slug: "teatro-jose-lucio-da-silva",
+			city: "Leiria",
+			lat: 39.7467,
+			lng: -8.8039,
+			scope: "venue",
+		},
+		{
+			id: 2,
+			name: "Marinha Grande",
+			slug: "marinha-grande",
+			city: "Marinha Grande",
+			scope: "concelho",
+		},
+	]);
+
+	await insertEvents(db, [
+		event(1, "passado", NOW - 30 * DAY),
+		event(2, "jazz", NOW + DAY, { title: "Jazz ao Fim da Tarde" }),
+		event(3, "cinema", NOW + 3 * DAY, {
+			venue_id: 2,
+			categories: ["Cinema"],
+		}),
+		// Two sessions of one show on the same Lisbon day: one agenda row.
+		event(4, "peca-18h", NOW + 5 * DAY, {
+			title: "Peça",
+			categories: ["Teatro"],
+		}),
+		event(5, "peca-21h", NOW + 5 * DAY + 3 * 3600, {
+			title: "Peça",
+			categories: ["Teatro"],
+		}),
+		// No venue at all: the join must keep the row, with null place fields.
+		event(6, "sem-sitio", NOW + 6 * DAY, {
+			venue_id: null,
+			categories: ["Música", "Teatro"],
+		}),
+		// Undated: id 8 is the older start, so desc(id) differs from start order.
+		event(7, "brevemente", NOW, { date_text: "Em breve", venue_id: 2 }),
+		event(8, "a-anunciar", NOW - 5 * DAY, { date_text: "A anunciar" }),
+	]);
+
+	await db.insert(schema.scrapeRuns).values([
+		{ source: "leiriagenda", started_at: NOW - 3 * DAY, items_found: 9 },
+		{
+			source: "leiriagenda",
+			started_at: NOW - 3600,
+			items_found: 12,
+			items_new: 4,
+		},
+		{ source: "leiriagenda", started_at: NOW - 2 * DAY, items_found: 10 },
+	]);
+});
+
+afterAll(() => t.cleanup());
+
+describe("listEvents: window and undated", () => {
+	test("returns dated events oldest first, merged, undated excluded", async () => {
+		expect(slugs(await list())).toEqual([
+			"passado",
+			"jazz",
+			"cinema",
+			"peca-18h",
+			"sem-sitio",
+		]);
+	});
+
+	test("dateFrom and dateTo are inclusive bounds on start_at", async () => {
+		const from = await list({ dateFrom: NOW + DAY });
+		expect(slugs(from)).toEqual(["jazz", "cinema", "peca-18h", "sem-sitio"]);
+
+		const to = await list({ dateTo: NOW + 3 * DAY });
+		expect(slugs(to)).toEqual(["passado", "jazz", "cinema"]);
+
+		const both = await list({ dateFrom: NOW + DAY, dateTo: NOW + 3 * DAY });
+		expect(slugs(both)).toEqual(["jazz", "cinema"]);
+	});
+
+	test("includeUndated adds the announcements into the same list", async () => {
+		const rows = await list({ includeUndated: true });
+		expect(slugs(rows)).toContain("brevemente");
+		expect(slugs(rows)).toContain("a-anunciar");
+		expect(rows).toHaveLength(7);
+		expect(rows.find((r) => r.slug === "brevemente")?.dateText).toBe(
+			"Em breve",
+		);
+	});
+});
+
+describe("listEvents: filters", () => {
+	test("category matches the whole category, including multi-category rows", async () => {
+		expect(slugs(await list({ category: "Cinema" }))).toEqual(["cinema"]);
+		expect(slugs(await list({ category: "Teatro" }))).toEqual([
+			"peca-18h",
+			"sem-sitio",
+		]);
+		expect(slugs(await list({ category: "Cine" }))).toEqual([]);
+	});
+
+	test("venueSlug keeps only that venue's events", async () => {
+		const rows = await list({ venueSlug: "marinha-grande" });
+		expect(slugs(rows)).toEqual(["cinema"]);
+		expect(await list({ venueSlug: "nao-existe" })).toEqual([]);
+	});
+
+	test("city keeps only events at venues in that city", async () => {
+		const rows = await list({ city: "Leiria" });
+		expect(slugs(rows)).toEqual(["passado", "jazz", "peca-18h"]);
+	});
+
+	test("filters combine", async () => {
+		const rows = await list({
+			city: "Leiria",
+			category: "Música",
+			dateFrom: NOW,
+		});
+		expect(slugs(rows)).toEqual(["jazz"]);
+	});
+
+	test("an unplaced venue ships null coordinates, never zero", async () => {
+		const rows = await list();
+		const sem = rows.find((r) => r.slug === "sem-sitio");
+		expect(sem).toMatchObject({
+			venueId: null,
+			venueName: null,
+			venueLat: null,
+			venueLng: null,
+			venueScope: null,
+		});
+
+		const cinema = rows.find((r) => r.slug === "cinema");
+		expect(cinema).toMatchObject({
+			venueLat: null,
+			venueLng: null,
+			venueScope: "concelho",
+		});
+
+		const jazz = rows.find((r) => r.slug === "jazz");
+		expect(jazz).toMatchObject({
+			venueLat: 39.7467,
+			venueLng: -8.8039,
+			venueScope: "venue",
+		});
+	});
+});
+
+describe("listEvents: merging and slicing", () => {
+	test("folds same-day sessions into one row carrying every start", async () => {
+		const peca = (await list()).find((r) => r.title === "Peça");
+		expect(peca?.slug).toBe("peca-18h");
+		expect(peca?.sessionStarts).toEqual([
+			NOW + 5 * DAY,
+			NOW + 5 * DAY + 3 * 3600,
+		]);
+	});
+
+	/**
+	 * Within the dated rows from `jazz` on there are 5 raw rows but 4 events. A
+	 * LIMIT applied in SQL would return 3 events here; slicing after the merge
+	 * returns the full 4 asked for.
+	 */
+	test("merges before the limit slice", async () => {
+		const rows = await list({ dateFrom: NOW, limit: 4 });
+		expect(slugs(rows)).toEqual(["jazz", "cinema", "peca-18h", "sem-sitio"]);
+	});
+
+	test("offset pages over merged events, never splitting a group", async () => {
+		const first = await list({ dateFrom: NOW, limit: 2 });
+		const second = await list({ dateFrom: NOW, limit: 2, offset: 2 });
+		expect(slugs(first)).toEqual(["jazz", "cinema"]);
+		expect(slugs(second)).toEqual(["peca-18h", "sem-sitio"]);
+		expect(second[0]?.sessionStarts).toHaveLength(2);
+	});
+
+	test("never carries a description or update stamp in the list payload", async () => {
+		for (const row of await list()) {
+			expect("description" in row).toBe(false);
+			expect("updatedAt" in row).toBe(false);
+		}
+	});
+});
+
+describe("undatedEvents", () => {
+	test("lists only announcements, newest id first", async () => {
+		const rows = await undatedEvents(db);
+		expect(slugs(rows)).toEqual(["a-anunciar", "brevemente"]);
+		expect(rows[0]?.dateText).toBe("A anunciar");
+	});
+});
+
+describe("eventStats", () => {
+	test("counts rows and reports the most recent run", async () => {
+		expect(await eventStats(db)).toEqual({
+			totalEvents: 8,
+			totalVenues: 2,
+			lastRunAt: NOW - 3600,
+			lastRunFound: 12,
+			lastRunNew: 4,
+		});
+	});
+
+	test("is zero and null on an empty database", async () => {
+		const empty = await createTestDb("findleiria-empty-");
+		try {
+			expect(await eventStats(empty.db)).toEqual({
+				totalEvents: 0,
+				totalVenues: 0,
+				lastRunAt: null,
+				lastRunFound: null,
+				lastRunNew: null,
+			});
+			expect(await eventDirectory(empty.db)).toEqual([]);
+			expect(await undatedEvents(empty.db)).toEqual([]);
+		} finally {
+			empty.cleanup();
+		}
+	});
+});
 
 describe("eventBySlug", () => {
 	test("returns the description and the update stamp the page needs", async () => {
-		const event = await eventBySlug(stubDb([detailRow]), "concerto-de-verao");
+		const found = await eventBySlug(db, "jazz");
 
-		expect(event).toMatchObject({
-			slug: "concerto-de-verao",
-			title: "Concerto de Verão",
-			description: "Uma noite de música no centro da cidade.",
-			updatedAt: 1_789_000_000,
+		expect(found).toMatchObject({
+			slug: "jazz",
+			title: "Jazz ao Fim da Tarde",
+			description: "Descrição de jazz",
+			updatedAt: NOW - DAY,
 			venueName: "Teatro José Lúcio da Silva",
+			venueCity: "Leiria",
 			categories: ["Música"],
 		});
 	});
 
 	/** A slug that no longer exists must be a 404, not an empty page. */
 	test("is null for an unknown slug", async () => {
-		expect(await eventBySlug(stubDb([]), "nao-existe")).toBeNull();
+		expect(await eventBySlug(db, "nao-existe")).toBeNull();
 	});
 
-	test("carries an absent description as null rather than undefined", async () => {
-		const event = await eventBySlug(
-			stubDb([{ ...detailRow, description: null }]),
-			"concerto-de-verao",
-		);
-
-		expect(event?.description).toBeNull();
+	test("returns the stored row, not the merged view", async () => {
+		const second = await eventBySlug(db, "peca-21h");
+		expect(second?.startAt).toBe(NOW + 5 * DAY + 3 * 3600);
 	});
 
-	/**
-	 * The window query shed descriptions to cut the agenda payload by a third;
-	 * only the detail query pays for them. If a row's description leaked into
-	 * list output, the payload would grow again without anyone noticing.
-	 */
-	test("never leaks into the agenda list payload", async () => {
-		const [event] = await listEvents(stubDb([detailRow]), listInput.parse({}));
-
-		expect(event).toBeDefined();
-		expect("description" in (event as object)).toBe(false);
-		expect("updatedAt" in (event as object)).toBe(false);
-	});
-});
-
-/**
- * The map's three fields (SLICE_14, Layer 2).
- *
- * The pins layer decides what it may draw from these, so the contract worth
- * pinning down is the negative one: a venue the pipeline could not place ships
- * `null` — never `0`, which is a real coordinate off the coast of Africa, and
- * never `undefined`, which quietly disappears through JSON.
- */
-describe("the map's fields", () => {
-	test("the list payload carries the coordinates and the scope", async () => {
-		const [event] = await listEvents(stubDb([detailRow]), listInput.parse({}));
-
-		expect(event).toMatchObject({
-			venueLat: 39.7467,
-			venueLng: -8.8039,
-			venueScope: "venue",
+	test("an event without a venue still resolves", async () => {
+		expect(await eventBySlug(db, "sem-sitio")).toMatchObject({
+			venueName: null,
+			categories: ["Música", "Teatro"],
 		});
-	});
-
-	test("an unplaced venue is null, not zero", async () => {
-		const [event] = await listEvents(
-			stubDb([
-				{
-					...detailRow,
-					venueLat: null,
-					venueLng: null,
-					venueScope: "concelho",
-				},
-			]),
-			listInput.parse({}),
-		);
-
-		expect(event?.venueLat).toBeNull();
-		expect(event?.venueLng).toBeNull();
-		expect(event?.venueScope).toBe("concelho");
 	});
 });
 
 describe("eventDirectory", () => {
-	test("maps every row for the prerender and the sitemap", async () => {
-		const events = await eventDirectory(
-			stubDb([detailRow, { ...detailRow, slug: "outro", description: null }]),
-		);
+	test("returns every event, undated and past included, newest first", async () => {
+		const rows = await eventDirectory(db);
 
-		expect(events).toHaveLength(2);
-		expect(events[0]).toMatchObject({
-			slug: "concerto-de-verao",
-			updatedAt: 1_789_000_000,
-		});
-		expect(events[1]).toMatchObject({ slug: "outro", description: null });
+		expect(rows).toHaveLength(8);
+		expect(rows[0]?.slug).toBe("sem-sitio");
+		expect(rows.at(-1)?.slug).toBe("passado");
+		expect(rows.every((r) => typeof r.description === "string")).toBe(true);
 	});
 
-	test("is empty rather than throwing on an empty database", async () => {
-		expect(await eventDirectory(stubDb([]))).toEqual([]);
+	test("keeps same-day sessions as separate rows", async () => {
+		const sessions = (await eventDirectory(db)).filter(
+			(r) => r.title === "Peça",
+		);
+		expect(sessions).toHaveLength(2);
 	});
 });
 
 describe("eventsBySlugs", () => {
-	test("returns [] without running for an empty slug list", async () => {
-		// The stub chain resolves rows for anything, so a non-[]
-		// result here would mean the query ran despite the shortcut.
-		expect(await eventsBySlugs(stubDb([]), [])).toEqual([]);
+	test("returns [] for an empty slug list", async () => {
+		expect(await eventsBySlugs(db, [])).toEqual([]);
 	});
 
-	test("maps matched slugs to the public row shape", async () => {
-		const events = await eventsBySlugs(stubDb([detailRow]), [
-			"concerto-de-verao",
-		]);
-
-		expect(events).toHaveLength(1);
-		expect(events[0]).toMatchObject({
-			slug: "concerto-de-verao",
-			title: "Concerto de Verão",
-			venueName: "Teatro José Lúcio da Silva",
-			categories: ["Música"],
-		});
-		// Shed descriptions exactly like the agenda list payload.
-		expect("description" in (events[0] as object)).toBe(false);
+	test("resolves saved slugs oldest first without descriptions", async () => {
+		const rows = await eventsBySlugs(db, ["cinema", "jazz"]);
+		expect(slugs(rows)).toEqual(["jazz", "cinema"]);
+		expect("description" in (rows[0] as object)).toBe(false);
 	});
 
 	/**
@@ -208,26 +358,12 @@ describe("eventsBySlugs", () => {
 	 * saved page must count two saved sessions as two rows, not glue them.
 	 */
 	test("does not merge same-day sessions", async () => {
-		const second = {
-			...detailRow,
-			id: 8,
-			slug: "concerto-de-verao-2",
-			title: "Concerto de Verão — sessão 2",
-		};
-		const events = await eventsBySlugs(stubDb([detailRow, second]), [
-			"concerto-de-verao",
-			"concerto-de-verao-2",
-		]);
-
-		expect(events).toHaveLength(2);
+		const rows = await eventsBySlugs(db, ["peca-18h", "peca-21h"]);
+		expect(slugs(rows)).toEqual(["peca-18h", "peca-21h"]);
 	});
 
-	test("lets slugs that no longer resolve drop out of the result", async () => {
-		const events = await eventsBySlugs(stubDb([detailRow]), [
-			"concerto-de-verao",
-			"nao-existe",
-		]);
-
-		expect(events.map((e) => e.slug)).toEqual(["concerto-de-verao"]);
+	test("lets slugs that no longer resolve drop out", async () => {
+		const rows = await eventsBySlugs(db, ["jazz", "nao-existe"]);
+		expect(slugs(rows)).toEqual(["jazz"]);
 	});
 });

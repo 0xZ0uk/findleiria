@@ -5,8 +5,8 @@ import { PageFooter } from "@/components/agenda/footer";
 import { MICRO, SHELL } from "@/components/agenda/layout";
 import { AgendaError } from "@/components/agenda/states";
 import { SaveButton } from "@/components/saved/save-button";
+import { useSavedStore } from "@/components/saved/saved-context";
 import { SHELL_DESCRIPTION, useDocumentMeta } from "@/hooks/use-document-meta";
-import { useSaved } from "@/hooks/use-saved";
 import type { SavedListEvent } from "@/utils/api";
 import { api } from "@/utils/api";
 import { clock, dayMonth, hasClock, plural, weekday } from "@/utils/format";
@@ -164,7 +164,7 @@ function NothingSaved() {
  * no longer resolve get their own honest section instead of vanishing.
  */
 export function SavedPage() {
-	const saved = useSaved();
+	const saved = useSavedStore();
 	useDocumentMeta("Guardados — FindLeiria", SHELL_DESCRIPTION);
 	const now = Math.floor(Date.now() / 1000);
 

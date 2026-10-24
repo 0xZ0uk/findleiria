@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 import { useSession } from "@/utils/auth-client";
 import { ApiError, listSaved, setSaved } from "@/utils/saved-client";
@@ -62,16 +62,33 @@ export function useSaved() {
 		},
 	});
 
-	return {
-		slugs,
-		isSaved: (slug: string) => slugs.has(slug),
-		pending: mutation.isPending,
-		toggle: (slug: string) => {
-			mutation.mutate({ slug, saved: !slugs.has(slug) });
+	const { mutate, isPending, variables } = mutation;
+	const isSaved = useCallback((slug: string) => slugs.has(slug), [slugs]);
+	const toggle = useCallback(
+		(slug: string) => {
+			mutate({ slug, saved: !slugs.has(slug) });
 		},
-		signedIn,
-		ready,
-	};
+		[mutate, slugs],
+	);
+	// Which slug is in flight, so a shared store disables only that button the
+	// way one-store-per-button used to.
+	const isPendingSlug = useCallback(
+		(slug: string) => isPending && variables?.slug === slug,
+		[isPending, variables],
+	);
+
+	return useMemo(
+		() => ({
+			slugs,
+			isSaved,
+			pending: isPending,
+			isPendingSlug,
+			toggle,
+			signedIn,
+			ready,
+		}),
+		[slugs, isSaved, isPending, isPendingSlug, toggle, signedIn, ready],
+	);
 }
 
 export type Saved = ReturnType<typeof useSaved>;

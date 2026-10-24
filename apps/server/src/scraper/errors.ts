@@ -8,6 +8,11 @@
  */
 export function errorMessage(err: unknown): string {
 	if (err instanceof Error) {
+		// drizzle wraps driver errors as "Failed query: <sql> params: …"; the
+		// driver's own message (the cause) is the part worth recording.
+		if (err.message.startsWith("Failed query:") && err.cause instanceof Error) {
+			return err.cause.message;
+		}
 		return err.message;
 	}
 	if (typeof err === "string") {

@@ -6,8 +6,16 @@
  * Supported hosts (v1): leiriagenda.cm-leiria.pt detail pages. Dedupes by
  * fingerprint, so re-ingesting a known URL is a no-op and manual additions
  * merge with the daily scrape instead of duplicating.
+ *
+ * The page is fetched through the scraper's `http.ts` (timeout, retries, and
+ * a non-2xx answer is an error), so a 404 or an error page is never parsed
+ * as an event.
  */
-export {};
+import { errorMessage } from "./scraper/errors";
+import { defaultFetchText } from "./scraper/http";
+import { ingest } from "./scraper/ingest";
+import { parseDetail } from "./scraper/leiriagenda";
+import type { RawEvent } from "./scraper/types";
 
 const url = process.argv[2];
 if (!url) {
@@ -23,14 +31,19 @@ if (!url.startsWith(SITE)) {
 	process.exit(1);
 }
 
-const { parseDetail } = await import("../src/scraper/leiriagenda");
-const { ingest } = await import("./scraper/ingest");
-
-let raw: ReturnType<typeof import("../src/scraper/leiriagenda").parseDetail>;
+let html: string;
 try {
-	raw = parseDetail(await (await fetch(url)).text(), url);
+	html = await defaultFetchText(url);
 } catch (err) {
-	console.error("parse failed:", err instanceof Error ? err.message : err);
+	console.error("fetch failed:", errorMessage(err));
+	process.exit(2);
+}
+
+let raw: RawEvent;
+try {
+	raw = parseDetail(html, url);
+} catch (err) {
+	console.error("parse failed:", errorMessage(err));
 	process.exit(2);
 }
 

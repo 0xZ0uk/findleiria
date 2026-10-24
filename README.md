@@ -18,8 +18,8 @@ feeding one deduplicated calendar that is published as a static snapshot.
 ### 2. Install & env
 
 ```bash
-git clone git@github.com:0xZ0uk/unreal-events.git
-cd unreal-events
+git clone git@github.com:0xZ0uk/findleiria.git
+cd findleiria
 pnpm install
 ```
 
@@ -94,6 +94,15 @@ That creates `local.db` with the 4 tables (`venues`, `events`,
 `event_sources`, `scrape_runs`) plus 10 seed venues. Schema changes later:
 `bun run db:generate` (new migration) + `bun run db:push`.
 
+Sign-in lives in a **second** database (`local-auth.db`, `AUTH_DATABASE_URL`)
+with its own committed migrations (user, session, account, verification, saved
+events and the auth rate-limit counters). Create it once, and again whenever a
+pull adds an auth migration:
+
+```bash
+pnpm --filter @events-tracker/auth db:migrate
+```
+
 ### 4. Run
 
 ```bash
@@ -125,8 +134,8 @@ pnpm --filter server scrape            # every source, sequentially
 pnpm --filter server scrape:leiriagenda
 ```
 
-Each source prints `{found, new, updated, failed, error}` and writes a
-`scrape_runs` row. Run it twice — the second must report `new: 0`
+Each source prints `{status, found, discovered, new, updated, failed, error}`
+and writes a `scrape_runs` row; the cleanup passes run once at the end. Run it twice — the second must report `new: 0`
 (idempotency invariant). Note: **Eventbrite rate-limits hard**; if a run
 dies with HTTP 429 wait a few minutes before retrying — the run is recorded
 and the next scheduled run self-heals.
@@ -151,18 +160,54 @@ DIGEST_KEYWORDS=tattoo,jazz pnpm --filter server digest -- --new 24
 
 ### 7. Cron automation (Hermes-specific)
 
-The daily scrape + Discord digest are Hermes Agent cron jobs (see
-`/.plans/SLICE_EVENTS_TRACKER.md`): scrape all sources daily at 07:00, digest
-to Discord at 09:00. To replicate elsewhere, cron these two commands:
+The daily job and the Discord digest are Hermes Agent cron jobs: the daily
+job at 07:00, the digest at 09:00. To replicate elsewhere, cron these two
+commands from the repo root:
 
 ```bash
-cd apps/server && bun run scrape    # every source
-DIGEST_KEYWORDS="..." bun run digest --new 24   # pipe to your notifier
-cd ../../packages/db && bun run db:publish      # mirror into Turso + redeploy
+pnpm --filter server daily                               # 07:00
+DIGEST_KEYWORDS="..." pnpm --filter server digest -- --new 24   # 09:00, pipe to your notifier
 ```
+
+`daily` (`apps/server/src/scraper/daily.ts`) runs every source in turn, then
+the cleanup passes (purge, venue merge, reconcile) once, then `db:publish`
+(mirror `local.db` into Turso + Vercel deploy hook), then prints a summary.
+
+- One failed source never stops the others.
+- Publish is **skipped** when the batch failed hard: a cleanup pass threw, or
+  more than half of the sources failed. One or a few failed sources still
+  publish the rest.
+- Exit code is 0 only when every source, every pass and the publish (with
+  its redeploy) succeeded, so cron flags any failure, including the ones that
+  were published around.
+- An `ALERT <source>` line means that source's listing came back empty, which
+  points to a broken parser or a block rather than a quiet day. Alerts are
+  printed but do not fail the job on their own.
+
+Every source's `scrape_runs` row records found / discovered (listing size) /
+pages fetched / new / updated / pruned / failed, plus `error`, `warnings`
+(e.g. the prune circuit breaker refusing) and `postpass_error`.
+
+`pnpm --filter server scrape [source]` is the same batch without the publish
+(it exits 1 when a source or a pass failed).
 
 Go through the package scripts (they wrap `varlock run`): a bare
 `bun src/...` gets no env, since Bun's own `.env` loading is off.
+
+**One-time Turso migration.** The publish mirrors every local column, and the
+site's build reads all of them, so Turso has to be migrated as far as
+`local.db`. After pulling migrations `0003` (`event_sources.last_seen_at`,
+`event_aliases`) and `0004` (the `scrape_runs` outcome columns), run this once
+from the repo root with the **read/write** token:
+
+```bash
+DATABASE_URL='libsql://<db>-<org>.turso.io' TURSO_AUTH_TOKEN='<TURSO_RW_TOKEN>' \
+  pnpm --filter @events-tracker/db db:migrate
+```
+
+Values set on the command line win over `.env.local` under `varlock run`.
+`db:publish` refuses to run (and prints this command) while Turso lacks a
+column.
 
 ### 8. Tests & checks
 
@@ -173,8 +218,10 @@ pnpm typecheck     # tsc in every package (turbo check-types; same as pnpm check
 pnpm test          # bun test in every package that has tests (turbo test)
 ```
 
-The tests are offline (fixtures, no network) and need no `.env`: 619 across
-server (442), web (63), api (92) and auth (22); `db` and `env` have none. To run
+The tests are offline (fixtures, no network) and need no `.env`: about 640
+across server (~430), web (~80), api (~107) and auth (~25); `db` and `env` have
+none. The api query tests run real SQL against a throwaway libSQL file with the
+committed migrations (`packages/api/src/test-db.ts`). To run
 one package: `pnpm --filter server test`. `apps/web`'s `check-types` is plain
 `tsc --noEmit`; the production build (`vite build`) is separate and needs a
 database, so CI does not run it.
@@ -196,8 +243,8 @@ everything the site serves into `apps/web/dist/`:
 - `evento/<slug>/index.html` (head tags, JSON-LD and the event embedded for a
   request-free first paint), `og/<slug>.png`, `sitemap.xml`
 
-The daily flow is scrape → `db:publish` (mirrors `local.db` into Turso) →
-deploy hook → Vercel rebuild. There is no Hono process in production; the local
+The daily flow (`pnpm --filter server daily`, see Cron automation) is scrape →
+`db:publish` (mirrors `local.db` into Turso) → deploy hook → Vercel rebuild. There is no Hono process in production; the local
 scraper is the only writer.
 
 ```bash
@@ -229,6 +276,21 @@ the schema's `#web` and `#auth` items:
 | `VITE_TURSO_URL` | **delete** | no longer read; would only invite re-inlining |
 | `VITE_TURSO_AUTH_TOKEN` | **delete** | was inlined into the public bundle |
 
+**Auth database migration (one-time per auth migration, before the deploy that
+needs it).** The functions never migrate: the auth tables, including the
+`rate_limit` table that backs sign-in throttling, must already exist in the
+production auth database, or sign-in fails. Run this from a checkout, with the
+production URL and read/write token in the shell (they override `.env.local`):
+
+```bash
+AUTH_DATABASE_URL='libsql://<auth-db>.turso.io' AUTH_TURSO_TOKEN='<read-write token>' \
+  pnpm --filter @events-tracker/auth db:migrate
+```
+
+OG cards are cached between builds in `apps/web/node_modules/.cache/og-cards`
+(keyed by card content, pruned each build); Vercel restores `node_modules/**`
+with its build cache, and a cold cache just renders every card.
+
 The build command first runs `pnpm --filter ./packages/auth env:check:production`
 (`NODE_ENV=production varlock load` over the `#auth` items), so a missing or
 malformed auth variable fails the deploy rather than the first sign-in. The
@@ -256,15 +318,19 @@ has committed, and exits non-zero if the hook fails.
 
 ## Stack
 
-better-t-stack monorepo · pnpm + Bun · React + TanStack Router (web, :3300) ·
+pnpm + Bun monorepo · React SPA with pathname routing, no router library (web,
+:3300) · better-auth (Google + email/password) on a separate libSQL database ·
 Drizzle + libSQL (`local.db` in dev, remote Turso in production) · Hono + tRPC
 survive as a **local-dev only** surface · Turborepo + Biome.
 
 ```
 apps/server/     scraper (src/scraper/) + digest CLI; Hono API for dev only
-apps/web/        static SPA (single view: / = the agenda)
-packages/api/    query functions (src/queries/) + tRPC routers wrapping them
+apps/web/        static SPA: / (agenda + map), /evento/<slug>, /guardados, /entrar
+packages/api/    query functions (src/queries/), snapshot builder, tRPC routers wrapping them
+packages/auth/   better-auth config, auth DB schema + migrations, Hono routes
 packages/db/     Drizzle schema, migrations, seeds (src/client.ts = env-free read client)
+packages/ui/     shared tokens (styles/globals.css) and primitives; see DESIGN.md
+api/             Vercel functions for /api/auth and saved events
 ```
 
 ## Commands
@@ -274,7 +340,8 @@ pnpm install
 pnpm check-types            # typecheck everything
 pnpm lint                   # biome ci .
 pnpm test                   # bun test in every package with tests
-pnpm --filter server scrape             # all sources
+pnpm --filter server daily              # cron job: all sources + passes + publish
+pnpm --filter server scrape             # all sources (no publish)
 pnpm --filter server scrape:leiriagenda # single source
 pnpm --filter server geocode:venues     # Nominatim geocoding (idempotent)
 pnpm --filter server digest             # plaintext digest (--new N supported)
@@ -302,24 +369,27 @@ eventbrite, viralagenda, ticketline, ...).
    Turso (see Deploy). The dev-only Hono server exposes the query functions
    (`events.list`, `byDay`, `undated`, `venues`, `stats`) over tRPC plus
    `/digest` (JSON).
-5. **Cron (Hermes)** — daily scrape 07:00 (all sources; 0-found×2 days =
-   broken-selector alert), daily Discord digest 09:00 (`DIGEST_KEYWORDS`
+5. **Cron (Hermes)** — `daily` at 07:00 (all sources, cleanup passes once,
+   publish; an empty listing prints an `ALERT` line), daily Discord digest 09:00 (`DIGEST_KEYWORDS`
    watchlist → ⭐ lines, rest compressed).
 
 ## Data model
 
-- `venues` — name, slug, address, lat/lng (16 geocoded), city
+- `venues` — name, slug, address, lat/lng (nullable), city, scope
+  (`venue` | `lugar` | `concelho`; only `venue` is drawn as a map pin)
 - `events` — title, slug, description, start_at/end_at (epoch), venue_id,
   image_url, url, categories (JSON), fingerprint (unique), date_text
   (non-null ⇒ undated: start_at is an ingestion placeholder, calendar views
   exclude it)
 - `event_sources` — attribution per (event, source)
-- `scrape_runs` — source, started/finished, items_found/new/failed, error
+- `scrape_runs` — source, started/finished, items_found/discovered/new/
+  updated/pruned/failed, pages_fetched, error, warnings, postpass_error
 
 ## Deferred
 
-- Visite Leiria (JS-rendered dates) + Ticketline (bot-walled) — need the
-  Playwright pipeline; parked.
+- Visite Leiria (JS-rendered dates) — needs the Playwright pipeline; parked.
+  (Ticketline is no longer deferred: its search pages are server-rendered and
+  the `ticketline` scraper is registered.)
 
-Plan: `/root/.plans/SLICE_EVENTS_TRACKER.md`
+Slice plans live in `.plans/`.
 

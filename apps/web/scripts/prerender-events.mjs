@@ -9,7 +9,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { renderOgCard } from "./og-card.mjs";
+import { buildCards, templateFingerprint } from "./og-cache.mjs";
+import { OG_TEMPLATE_FILES, renderOgCard } from "./og-card.mjs";
 import {
 	APP_DIR,
 	buildCredentials,
@@ -21,6 +22,12 @@ const DIST = path.join(APP_DIR, "dist");
 const DATA = path.join(DIST, "data");
 const SITE = "https://findleiria.vercel.app";
 const LISBON_TZ = "Europe/Lisbon";
+// Rendered OG cards, keyed by content (see og-cache.mjs). Lives under
+// node_modules because Vercel restores node_modules/** between builds (the
+// build cache is per project and git branch, retained one month); a missing or
+// empty directory is simply a cold build that renders every card.
+const OG_CACHE_DIR = path.join(APP_DIR, "node_modules", ".cache", "og-cards");
+const OG_CONCURRENCY = 4;
 
 // ------------------------------------------------------------ snapshot guard
 // The page has no other data source, so a build whose snapshot is missing or
@@ -329,6 +336,39 @@ async function main() {
 		fs.rmSync(path.join(DIST, sub), { recursive: true, force: true });
 	}
 
+	// ---- OG cards for every event, past ones included: their pages are still
+	// prerendered and still name /og/<slug>.png, and a shared link keeps its
+	// preview. Unchanged cards come from the cache, so a past event costs a
+	// file copy, not a render; only new or edited events are drawn.
+	const cardEntries = rows.map((row) => {
+		const hasMachineDate =
+			!row.dateText && typeof row.startAt === "number" && row.startAt > 0;
+		return {
+			slug: String(row.slug || "").trim(),
+			title: (row.title ? decodeEntities(row.title) : "") || "Evento",
+			dayLabel: hasMachineDate
+				? lisbonDayLabel(row.startAt)
+				: row.dateText
+					? decodeEntities(row.dateText)
+					: "",
+			venueLabel: row.venueName ? decodeEntities(row.venueName) : "Leiria",
+		};
+	});
+	if (cardEntries.some((entry) => !entry.slug)) {
+		throw new Error("Row with empty slug encountered.");
+	}
+	const cardStats = await buildCards({
+		entries: cardEntries,
+		cacheDir: OG_CACHE_DIR,
+		outDir: path.join(DIST, "og"),
+		fingerprint: templateFingerprint(OG_TEMPLATE_FILES),
+		render: renderOgCard,
+		concurrency: OG_CONCURRENCY,
+	});
+	console.log(
+		`[prerender] og cards: ${cardStats.rendered} rendered, ${cardStats.reused} from cache, ${cardStats.evicted} evicted`,
+	);
+
 	let pagesWritten = 0;
 	const sitemapUrls = [];
 
@@ -337,24 +377,6 @@ async function main() {
 		if (!slug) throw new Error("Row with empty slug encountered.");
 		const titleText = row.title ? decodeEntities(row.title) : "";
 		const descText = row.description ? decodeEntities(row.description) : "";
-
-		// ---- OG card
-		const hasMachineDate =
-			!row.dateText && typeof row.startAt === "number" && row.startAt > 0;
-		const dayLabel = hasMachineDate
-			? lisbonDayLabel(row.startAt)
-			: row.dateText
-				? decodeEntities(row.dateText)
-				: "";
-		const venueLabel = row.venueName ? decodeEntities(row.venueName) : "Leiria";
-		const png = await renderOgCard({
-			title: titleText || "Evento",
-			dayLabel,
-			venueLabel,
-		});
-		const ogDir = path.join(DIST, "og");
-		fs.mkdirSync(ogDir, { recursive: true });
-		fs.writeFileSync(path.join(ogDir, `${slug}.png`), png);
 
 		// ---- per-event HTML page
 		const jsonLd = buildJsonLd(row);

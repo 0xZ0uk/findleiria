@@ -5,11 +5,19 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Resvg } from "@resvg/resvg-js";
+import { renderAsync } from "@resvg/resvg-js";
 import satori from "satori";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const FONT_DIR = path.resolve(SCRIPT_DIR, "..", "assets", "fonts");
+
+/** Every file that shapes the card; the prerender hashes them into the cache key. */
+export const OG_TEMPLATE_FILES = [
+	fileURLToPath(import.meta.url),
+	path.join(FONT_DIR, "schibsted-grotesk-latin-800-normal.woff"),
+	path.join(FONT_DIR, "karla-latin-600-normal.woff"),
+	path.join(FONT_DIR, "karla-latin-400-normal.woff"),
+];
 
 const fonts = [
 	{
@@ -183,7 +191,10 @@ export async function renderOgCard({ title, dayLabel, venueLabel }) {
 		fonts,
 	});
 
-	const resvg = new Resvg(svg, { fitTo: { mode: "width", value: WIDTH } });
-	const png = resvg.render().asPng();
-	return Buffer.from(png);
+	// renderAsync rasterises on libuv's thread pool, so concurrent cards overlap
+	// instead of each blocking the event loop.
+	const rendered = await renderAsync(svg, {
+		fitTo: { mode: "width", value: WIDTH },
+	});
+	return Buffer.from(rendered.asPng());
 }

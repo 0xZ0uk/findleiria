@@ -3,9 +3,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { createReadDb, type Db, schema } from "@events-tracker/db/client";
-import { migrate } from "drizzle-orm/libsql/migrator";
+import { type Db, schema } from "@events-tracker/db/client";
 
+import { WINDOW_MAX } from "./queries/events";
 import {
 	assertFileSafeSlug,
 	buildSnapshot,
@@ -18,47 +18,31 @@ import {
 	SNAPSHOT_SLACK_DAYS,
 	SNAPSHOT_VERSION,
 } from "./snapshot-shape";
+import {
+	createTestDb,
+	DAY,
+	event,
+	insertEvents,
+	NOW,
+	NOW_MS,
+	type TestDb,
+} from "./test-db";
 
 /**
  * The snapshot builder against a real libSQL file with the committed
- * migrations applied. The query tests stub drizzle, so this is where the SQL
- * itself (the window bounds, the joins, the session merge) runs for real.
+ * migrations applied (see `./test-db.ts`): the window bounds, the joins and the
+ * session merge run as SQL, not as a stand-in.
  */
 
-const MIGRATIONS = path.resolve(import.meta.dir, "../../db/src/migrations");
-const DAY = 86_400;
-/** A fixed build clock: 2026-10-24 12:00 UTC. */
-const NOW_MS = Date.UTC(2026, 9, 24, 12, 0, 0);
-const NOW = NOW_MS / 1000;
-
 let tmp: string;
+let testDb: TestDb;
 let db: Db;
 let snapshot: Snapshot;
 
-function event(
-	id: number,
-	slug: string,
-	start_at: number,
-	extra: Partial<typeof schema.events.$inferInsert> = {},
-): typeof schema.events.$inferInsert {
-	return {
-		id,
-		slug,
-		title: extra.title ?? `Evento ${slug}`,
-		description: `Descrição de ${slug}`,
-		start_at,
-		venue_id: 1,
-		categories: ["Música"],
-		fingerprint: `fp-${slug}`,
-		updated_at: NOW - DAY,
-		...extra,
-	};
-}
-
 beforeAll(async () => {
-	tmp = fs.mkdtempSync(path.join(os.tmpdir(), "findleiria-snapshot-"));
-	db = createReadDb(`file:${path.join(tmp, "test.db")}`);
-	await migrate(db, { migrationsFolder: MIGRATIONS });
+	tmp = fs.mkdtempSync(path.join(os.tmpdir(), "findleiria-snapshot-out-"));
+	testDb = await createTestDb("findleiria-snapshot-");
+	db = testDb.db;
 
 	await db.insert(schema.venues).values({
 		id: 1,
@@ -93,7 +77,7 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
-	db.$client.close();
+	testDb.cleanup();
 	fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -150,6 +134,47 @@ describe("buildSnapshot", () => {
 			venueName: "Teatro José Lúcio da Silva",
 		});
 	});
+});
+
+/**
+ * `truncated` must mean rows were really dropped: exactly WINDOW_MAX events
+ * fit and is not truncation; one more is.
+ */
+describe("truncated", () => {
+	async function windowWith(count: number) {
+		const t = await createTestDb("findleiria-trunc-");
+		try {
+			await t.db.insert(schema.venues).values({
+				id: 1,
+				name: "Teatro",
+				slug: "teatro",
+				city: "Leiria",
+				scope: "venue",
+			});
+			// Distinct titles, so nothing merges.
+			const rows = Array.from({ length: count }, (_, i) =>
+				event(i + 1, `e-${i}`, NOW + 3600 + i * 60, {
+					title: `Título único ${i}`,
+				}),
+			);
+			await insertEvents(t.db, rows);
+			return await buildSnapshot(t.db, NOW_MS);
+		} finally {
+			t.cleanup();
+		}
+	}
+
+	test("is false at exactly WINDOW_MAX events", async () => {
+		const s = await windowWith(WINDOW_MAX);
+		expect(s.agenda.events).toHaveLength(WINDOW_MAX);
+		expect(s.agenda.truncated).toBe(false);
+	}, 60_000);
+
+	test("is true one past WINDOW_MAX, and the file stays capped", async () => {
+		const s = await windowWith(WINDOW_MAX + 1);
+		expect(s.agenda.events).toHaveLength(WINDOW_MAX);
+		expect(s.agenda.truncated).toBe(true);
+	}, 60_000);
 });
 
 describe("writeSnapshot", () => {

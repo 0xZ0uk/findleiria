@@ -20,11 +20,11 @@
 
 import { isDistrictLocality } from "./district";
 import { lisbonDay } from "./fingerprint";
+import { lastInstant } from "./lifecycle";
 import {
 	isVagueVenue,
 	normalizeCity,
 	normalizeTitle,
-	slugify,
 	venuesMatch,
 	venueTokens,
 } from "./normalize";
@@ -80,15 +80,6 @@ export function rowTrust(row: IdentityRow): number {
 		: Math.min(...row.sources.map(sourceTrust));
 }
 
-/** Stable identity key: same title+venue+Lisbon-day ⇒ same real-world show. */
-export function identityKey(
-	title: string,
-	venueRef: string,
-	startAt: number,
-): string {
-	return `${normalizeTitle(title)}|${slugify(venueRef)}|${lisbonDay(startAt)}`;
-}
-
 export interface MergePlan {
 	/** Canonical session rows (highest-trust tier), one per time cluster. */
 	keepers: IdentityRow[];
@@ -108,6 +99,33 @@ export const SESSION_WINDOW_SECONDS = 3600;
 
 /** A row spanning at least this long describes a RUN of days, not a session. */
 export const SPAN_SECONDS = 86_400;
+
+/**
+ * Two occurrences of ONE source item at most this far apart — from the first
+ * one's last instant (`lastInstant`) to the next one's start — are one run of
+ * consecutive days (a festa's day pages). Anything further apart is a
+ * recurrence (a monthly feira, a weekly market) and stays separate rows.
+ */
+export const CONTIGUOUS_GAP_SECONDS = 86_400;
+
+/**
+ * True when an occurrence starting at `nextStart` continues the run `prev`
+ * already stands for: it starts inside `prev` or within
+ * CONTIGUOUS_GAP_SECONDS of its last instant. Shared by reconcile (pass 3)
+ * and ingest (re-scraped day pages), so the two never disagree on whether a
+ * day page belongs to an existing card — disagreeing is what made them undo
+ * each other every run (C6).
+ */
+export function continuesRun(
+	prev: { start_at: number; end_at?: number | null },
+	nextStart: number,
+): boolean {
+	return (
+		nextStart >= prev.start_at &&
+		nextStart - lastInstant(prev.start_at, prev.end_at ?? null) <=
+			CONTIGUOUS_GAP_SECONDS
+	);
+}
 
 /** A row's occupied interval; an open-ended row occupies its whole day. */
 function occupiedRange(row: {
@@ -594,7 +612,11 @@ export function planComponents<T extends ComponentRow>(rows: T[]): T[][] {
 
 	// Pass 3 — one source item published once per day (a festa's day pages,
 	// regiaoleiria-style). The source's own item id is the strongest identity
-	// signal available: those rows are one event whatever the day or wording.
+	// signal available: those rows are one event whatever the wording — but
+	// only while the days are CONSECUTIVE (C4). A recurring item (a monthly
+	// feira on 1 Nov, 1 Dec and 1 Jan) is several occurrences; fusing them made
+	// one card running "1 Nov – 1 Jan". Walk the item's rows by start and join
+	// a row only when it continues the run so far (`continuesRun`).
 	const byItem = new Map<string, T[]>();
 	for (const r of rows) {
 		const key = r.itemKey;
@@ -604,9 +626,19 @@ export function planComponents<T extends ComponentRow>(rows: T[]): T[][] {
 		byItem.set(key, list);
 	}
 	for (const group of byItem.values()) {
-		const first = group[0];
-		if (first === undefined) continue;
-		for (const r of group) union(first.id, r.id);
+		const sorted = [...group].sort(
+			(a, b) => a.start_at - b.start_at || a.id - b.id,
+		);
+		let run: { id: number; start_at: number; end_at: number } | null = null;
+		for (const r of sorted) {
+			const last = lastInstant(r.start_at, r.end_at ?? null);
+			if (run !== null && continuesRun(run, r.start_at)) {
+				union(run.id, r.id);
+				run.end_at = Math.max(run.end_at, last);
+			} else {
+				run = { id: r.id, start_at: r.start_at, end_at: last };
+			}
+		}
 	}
 
 	const byRoot = new Map<number, T[]>();

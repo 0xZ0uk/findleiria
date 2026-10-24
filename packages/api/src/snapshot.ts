@@ -51,27 +51,34 @@ export async function buildSnapshot(
 		to: now + (AGENDA_WINDOW_DAYS + SNAPSHOT_SLACK_DAYS) * DAY,
 	};
 
-	const [events, undated, stats, directory] = await Promise.all([
-		listEvents(
-			db,
-			listInput.parse({
-				dateFrom: covers.from,
-				dateTo: covers.to,
-				includeUndated: false,
-				limit: WINDOW_MAX,
-			}),
-		),
+	// Ask for one row past the cap (the schema stops the input at WINDOW_MAX, so
+	// the limit is overridden after parsing): a window of exactly WINDOW_MAX
+	// events is complete, and only a surplus row proves something was cut.
+	const windowInput = {
+		...listInput.parse({
+			dateFrom: covers.from,
+			dateTo: covers.to,
+			includeUndated: false,
+		}),
+		limit: WINDOW_MAX + 1,
+	};
+
+	const [fetched, undated, stats, directory] = await Promise.all([
+		listEvents(db, windowInput),
 		undatedEvents(db),
 		eventStats(db),
 		eventDirectory(db),
 	]);
+
+	const truncated = fetched.length > WINDOW_MAX;
+	const events = truncated ? fetched.slice(0, WINDOW_MAX) : fetched;
 
 	return {
 		agenda: {
 			version: SNAPSHOT_VERSION,
 			generatedAt: now,
 			covers,
-			truncated: events.length >= WINDOW_MAX,
+			truncated,
 			stats,
 			events,
 			undated,

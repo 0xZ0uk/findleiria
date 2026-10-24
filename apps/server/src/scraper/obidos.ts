@@ -1,6 +1,10 @@
 import { isLeiriaDistrict, normalizePlace } from "./district";
 import { toEpochInLisbon } from "./fingerprint";
 import { defaultFetchText } from "./http";
+import { createFetchGate } from "./lib/fetch-gate";
+import { textOf } from "./lib/html";
+import { monthFromName } from "./lib/pt-dates";
+import { defaultSleep, randomDelay } from "./lib/timing";
 import { decodeEntities } from "./normalize";
 import { loadState, saveState } from "./state";
 import type { RawEvent } from "./types";
@@ -78,6 +82,8 @@ export interface ScrapeResult {
 	pagesFetched: number;
 	/** All event urls discovered from the event sitemap (pre-gate). */
 	discovered: number;
+	/** Saves the advanced watermark; the runner calls it after ingest (C7). Absent when discovery failed. */
+	commit?: () => void;
 }
 
 export interface ScrapeDeps {
@@ -87,10 +93,6 @@ export interface ScrapeDeps {
 	saveState: (s: ObidosState) => void;
 	now: number;
 }
-
-const defaultSleep = (ms: number) =>
-	new Promise<void>((r) => setTimeout(r, ms));
-const randomDelay = () => 350 + Math.floor(Math.random() * 300);
 
 export interface SitemapEntry {
 	url: string;
@@ -142,7 +144,7 @@ export function parseDetail(html: string): ParsedDetail {
 	const titleMatch = html.match(/<h2 class="banner-title">([\s\S]*?)<\/h2>/i);
 	let title: string | null = null;
 	if (titleMatch) {
-		title = decodeEntities(stripTags(titleMatch[1] ?? "")).trim() || null;
+		title = cleanText(titleMatch[1] ?? "") || null;
 	}
 	if (!title) {
 		const og = html.match(/<meta property="og:title" content="([^"]*)"/);
@@ -159,7 +161,7 @@ export function parseDetail(html: string): ParsedDetail {
 	const block = html.match(/<div class="date-location">([\s\S]*?)<\/div>/is);
 	if (block) {
 		const spans = [...(block[1] ?? "").matchAll(/<span>([\s\S]*?)<\/span>/gis)]
-			.map((m) => decodeEntities(stripTags(m[1] ?? "")).trim())
+			.map((m) => cleanText(m[1] ?? ""))
 			.filter(Boolean);
 		dateText = spans[0] ?? null;
 		venue = spans[1] ?? null;
@@ -170,9 +172,7 @@ export function parseDetail(html: string): ParsedDetail {
 		/<div class="etn-event-content-body">([\s\S]*?)<div class="event-share">/is,
 	);
 	if (body) {
-		const text = decodeEntities(stripTags(body[1] ?? ""))
-			.replace(/\s+/g, " ")
-			.trim();
+		const text = cleanText(body[1] ?? "");
 		if (text) {
 			description = text.slice(0, DESCRIPTION_MAX_CHARS);
 		}
@@ -184,33 +184,14 @@ export function parseDetail(html: string): ParsedDetail {
 	return { title, dateText, venue, description, imageUrl };
 }
 
-/** Strip element tags from HTML, keeping text. */
-function stripTags(html: string): string {
-	return html
-		.replace(/<[^>]*>/g, " ")
-		.replace(/&nbsp;|&#160;/g, " ")
-		.replace(/&#8211;|&ndash;/g, "–")
-		.replace(/&#8212;|&mdash;/g, "—")
-		.replace(/&#8217;|&rsquo;|&lsquo;/g, "'")
-		.replace(/&amp;/g, "&")
-		.replace(/\s+/g, " ")
-		.trim();
+/**
+ * Display text of an HTML fragment. The site writes apostrophes as curly
+ * entities; the agenda has always shown them straight, so fold them before
+ * the canonical decode.
+ */
+function cleanText(html: string): string {
+	return textOf(html.replace(/&#8217;|&rsquo;|&lsquo;/g, "'"));
 }
-
-const MONTHS: Record<string, number> = {
-	janeiro: 1,
-	fevereiro: 2,
-	marco: 3,
-	abril: 4,
-	maio: 5,
-	junho: 6,
-	julho: 7,
-	agosto: 8,
-	setembro: 9,
-	outubro: 10,
-	novembro: 11,
-	dezembro: 12,
-};
 
 export interface ParsedDate {
 	startYear: number;
@@ -237,8 +218,8 @@ export function parseDate(text: string): ParsedDate | null {
 	if (!m) {
 		return null;
 	}
-	const startMonth = MONTHS[monthKey(m[2] ?? "")];
-	const endMonth = m[5] ? MONTHS[monthKey(m[5] ?? "")] : startMonth;
+	const startMonth = monthFromName(m[2] ?? "");
+	const endMonth = m[5] ? monthFromName(m[5] ?? "") : startMonth;
 	if (startMonth == null || endMonth == null) {
 		return null;
 	}
@@ -252,14 +233,6 @@ export function parseDate(text: string): ParsedDate | null {
 		endMonth,
 		endDay: Number(m[4] ?? m[1]),
 	};
-}
-
-/** Lowercase + accent-strip a Portuguese month name for the MONTHS map. */
-function monthKey(name: string): string {
-	return name
-		.normalize("NFD")
-		.replace(/[\u0300-\u036f]/g, "")
-		.toLowerCase();
 }
 
 /** "A definir" / empty venue ⇒ unknown → the task's Óbidos city placeholder. */
@@ -447,19 +420,16 @@ export async function scrape(
 	},
 	isInScope: (city: string | null | undefined) => boolean = () => true,
 ): Promise<ScrapeResult> {
-	let requests = 0;
 	let failures = 0;
 	let firstError: string | null = null;
 	let pagesFetched = 0;
 
-	const fetchPage = async (url: string): Promise<string> => {
-		if (requests >= MAX_REQUESTS) {
-			throw new Error(`request cap ${MAX_REQUESTS} reached`);
-		}
-		requests++;
-		await deps.sleep(randomDelay());
-		return deps.fetchText(url);
-	};
+	const { fetchPage, capReached } = createFetchGate({
+		fetchText: deps.fetchText,
+		sleep: deps.sleep,
+		maxRequests: MAX_REQUESTS,
+		delay: () => randomDelay(),
+	});
 
 	// 1. event sitemap → every detail url + its lastmod watermark
 	let entries: SitemapEntry[] = [];
@@ -470,8 +440,19 @@ export async function scrape(
 	} catch (err) {
 		return {
 			events: [],
-			failures,
-			firstError: err instanceof Error ? err.message : String(err),
+			failures: failures + 1,
+			firstError: `${ETN_SITEMAP}: ${err instanceof Error ? err.message : String(err)}`,
+			pagesFetched,
+			discovered: 0,
+		};
+	}
+	if (entries.length === 0) {
+		// A sitemap with no event urls at all is broken discovery, not a quiet day
+		// (zero CHANGED urls, i.e. an unmoved watermark, is handled below).
+		return {
+			events: [],
+			failures: failures + 1,
+			firstError: `${ETN_SITEMAP}: sitemap parsed to zero event urls`,
 			pagesFetched,
 			discovered: 0,
 		};
@@ -495,7 +476,7 @@ export async function scrape(
 	const events: RawEvent[] = [];
 	const fetched: SitemapEntry[] = [];
 	for (const c of fetchList) {
-		if (requests >= MAX_REQUESTS) {
+		if (capReached()) {
 			break;
 		}
 		try {
@@ -506,10 +487,14 @@ export async function scrape(
 			if (raw && isInScope(raw.city)) {
 				events.push(raw);
 			}
-			// record the watermark only after a successful fetch so a changed
-			// page is retried (and a dead url keeps surfacing as a failure).
-			watermark[c.url] = c.lastmod;
-			fetched.push(c);
+			// Record the watermark only for a page that parsed to an event
+			// (emitted, out of district, or merely over), so a changed page is
+			// retried, a dead url keeps surfacing as a failure, and a page with
+			// no title is picked up again once the parser handles it (C7).
+			if (raw || toRawEvent(parsed, c.url, Number.NEGATIVE_INFINITY) !== null) {
+				watermark[c.url] = c.lastmod;
+				fetched.push(c);
+			}
 		} catch (err) {
 			failures++;
 			if (!firstError) {
@@ -518,16 +503,16 @@ export async function scrape(
 		}
 	}
 
-	// 4. persist watermark for successfully-fetched urls.
-	if (fetched.length > 0) {
-		deps.saveState({ lastmod: watermark });
-	}
-
+	// 4. persist the watermark for those urls — deferred (C7): the runner
+	// saves it only after ingest committed.
 	return {
 		events,
 		failures,
 		firstError,
 		pagesFetched,
 		discovered: all.length,
+		commit: () => {
+			if (fetched.length > 0) deps.saveState({ lastmod: watermark });
+		},
 	};
 }

@@ -1,6 +1,9 @@
 import { errorMessage } from "./errors";
 import { toEpochInLisbon } from "./fingerprint";
 import { defaultFetchText } from "./http";
+import { monthFromName } from "./lib/pt-dates";
+import { defaultSleep, randomDelay } from "./lib/timing";
+import { decodeEntities } from "./normalize";
 import { loadState, saveState } from "./state";
 import type { RawEvent } from "./types";
 
@@ -61,6 +64,8 @@ export interface ScrapeResult {
 	pagesFetched: number;
 	/** Unique event slugs seen across listing pages. */
 	discovered: number;
+	/** Saves the new seen slugs; the runner calls it after ingest (C7). */
+	commit: () => void;
 }
 
 export interface ScrapeDeps {
@@ -70,10 +75,6 @@ export interface ScrapeDeps {
 	saveState: (s: CaldasState) => void;
 	now: number;
 }
-
-const defaultSleep = (ms: number) =>
-	new Promise<void>((r) => setTimeout(r, ms));
-const randomDelay = () => 300 + Math.floor(Math.random() * 300);
 
 /** Lisbon wall-clock derived from a card date tuple. */
 export interface CardDate {
@@ -90,24 +91,6 @@ export interface ListingCard {
 	end: CardDate;
 }
 
-/** PT month abbreviations as displayed on the cards ("set."). */
-const MONTHS: Record<string, number> = {
-	jan: 1,
-	fev: 2,
-	mar: 3,
-	abr: 4,
-	mai: 5,
-	jun: 6,
-	jul: 7,
-	ago: 8,
-	set: 9,
-	out: 10,
-	nov: 11,
-	dez: 12,
-};
-
-import { decodeEntities } from "./normalize";
-
 /** Decode the entities the listing cards emit — shared with every other
  * source so there is exactly one implementation (see `./normalize`). */
 export { decodeEntities };
@@ -123,7 +106,7 @@ export function parseCardDate(
 		.replace(/[^a-z]/gi, "")
 		.toLowerCase()
 		.slice(0, 3);
-	const month = MONTHS[monthStr];
+	const month = monthFromName(monthStr);
 	const year =
 		2000 +
 		Number(
@@ -304,7 +287,7 @@ export async function scrape(
 	};
 
 	const fetchText = deps.fetchText;
-	const delay = () => deps.sleep(randomDelay());
+	const delay = () => deps.sleep(randomDelay(300, 300));
 
 	const state = deps.loadState();
 	const seen = new Set(state.seen);
@@ -344,13 +327,22 @@ export async function scrape(
 	// but the gate still runs on the (injectable) scope predicate.
 	const events: RawEvent[] = [];
 	const emittedKeys = new Set<string>();
+	// Slugs to mark seen once ingest commits (C7): emitted, a same-run
+	// duplicate of an emitted card, or out of scope. A card that did not
+	// parse, or one already over, stays unseen: cards come from the listing
+	// itself, so re-reading them costs no request.
+	const handled: string[] = [];
 	for (const [slug, card] of discovered) {
 		if (seen.has(slug)) {
 			continue;
 		}
 		const url = `${SITE}${AGENDA_PATH}/${slug}`;
 		const raw = toRawEvent(card, url, deps.now, onMalformed);
-		if (raw && isInScope(raw.city)) {
+		if (!raw) {
+			continue;
+		}
+		handled.push(slug);
+		if (isInScope(raw.city)) {
 			// Guard against title+same-day collisions within a run.
 			const key = `${raw.title}|${raw.startAt}`;
 			if (!emittedKeys.has(key)) {
@@ -360,13 +352,13 @@ export async function scrape(
 		}
 	}
 
-	deps.saveState({ seen: [...new Set([...state.seen, ...discovered.keys()])] });
-
 	return {
 		events,
 		failures,
 		firstError,
 		pagesFetched,
 		discovered: discovered.size,
+		commit: () =>
+			deps.saveState({ seen: [...new Set([...state.seen, ...handled])] }),
 	};
 }

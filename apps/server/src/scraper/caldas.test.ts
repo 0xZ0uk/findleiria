@@ -201,6 +201,30 @@ describe("scrape (injected fetchText over the real fixtures)", () => {
 		expect(res.failures).toBe(1);
 		expect(res.firstError).toContain("page=2");
 	});
+
+	test("C7: seen is saved on commit only — emitted and gated-out cards, never the past ones", async () => {
+		const saved: { seen: string[] }[] = [];
+		const capture = (s: { seen: string[] }) => {
+			saved.push(s);
+		};
+		const gated = await scrape(
+			{ ...deps([]), saveState: capture },
+			() => false,
+		);
+		expect(gated.events).toEqual([]);
+		expect(saved).toHaveLength(0);
+		gated.commit();
+		expect(saved[0]?.seen).toHaveLength(34);
+
+		// Years later every card is over: none is emitted, none is marked seen.
+		const later = await scrape(
+			{ ...deps([]), saveState: capture, now: NOW + 10 * 365 * 86_400 },
+			() => true,
+		);
+		expect(later.events).toEqual([]);
+		later.commit();
+		expect(saved[1]?.seen).toEqual([]);
+	});
 });
 
 describe("tolerances / constants", () => {

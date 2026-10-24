@@ -108,6 +108,68 @@ describe("day pages of ONE source item", () => {
 	});
 });
 
+describe("C4 — recurrences of ONE source item are not a run", () => {
+	const occurrence = (id: number, start: number): VariantRow => ({
+		id,
+		title: "Feira Mensal de Velharias",
+		venue: "Largo do Mercado",
+		city: "Leiria",
+		start_at: start,
+		end_at: null,
+		sources: ["municipal"],
+		itemKey: "municipal:feira-mensal",
+	});
+
+	test("1 Nov, 1 Dec, 1 Jan stay three components (no 'Nov – Jan' card)", () => {
+		const rows = [
+			occurrence(1, at(2026, 11, 1, 9, 0)),
+			occurrence(2, at(2026, 12, 1, 9, 0)),
+			occurrence(3, at(2027, 1, 1, 9, 0)),
+		];
+		const components = planComponents(rows);
+		expect(components.length).toBe(3);
+	});
+
+	test("a weekly or every-other-day recurrence stays apart too", () => {
+		expect(
+			planComponents([
+				occurrence(1, at(2026, 11, 7, 9, 0)),
+				occurrence(2, at(2026, 11, 14, 9, 0)),
+			]).length,
+		).toBe(2);
+		expect(
+			planComponents([
+				occurrence(1, at(2026, 11, 7, 9, 0)),
+				occurrence(2, at(2026, 11, 9, 9, 0)),
+			]).length,
+		).toBe(2);
+	});
+
+	test("a contiguous run joins, and a later recurrence of it does not", () => {
+		const rows = [
+			occurrence(1, at(2026, 11, 1, 9, 0)),
+			occurrence(2, at(2026, 11, 2, 9, 0)),
+			occurrence(3, at(2026, 11, 3, 9, 0)),
+			occurrence(4, at(2026, 12, 1, 9, 0)),
+		];
+		const components = planComponents(rows)
+			.map((c) => c.map((r) => r.id).sort())
+			.sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0));
+		expect(components).toEqual([[1, 2, 3], [4]]);
+	});
+
+	test("a page that starts the day after a real multi-day end still continues the run", () => {
+		const rows = [
+			{
+				...occurrence(1, at(2026, 11, 1, 18, 0)),
+				end_at: at(2026, 11, 2, 2, 0),
+			},
+			occurrence(2, at(2026, 11, 3, 1, 0)),
+		];
+		expect(planComponents(rows).length).toBe(1);
+	});
+});
+
 describe("titleCoreTokens", () => {
 	test("keeps what names the event, drops wording and edition noise", () => {
 		expect(titleCoreTokens("Festas de São Silvestre")).toEqual([

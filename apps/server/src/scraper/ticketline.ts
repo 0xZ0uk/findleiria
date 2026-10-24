@@ -1,8 +1,10 @@
 import * as cheerio from "cheerio";
 import { DateTime } from "luxon";
 import { isLeiriaDistrict } from "./district";
-import { toEpochInLisbonOrNull } from "./fingerprint";
 import { defaultFetchText } from "./http";
+import { createFetchGate } from "./lib/fetch-gate";
+import { ymdToEpoch } from "./lib/pt-dates";
+import { defaultSleep, randomDelay } from "./lib/timing";
 import type { RawEvent } from "./types";
 
 /**
@@ -145,18 +147,7 @@ export function parseDetail(html: string): DetailInfo | null {
 
 /** Epoch (UTC seconds) for a "YYYY-MM-DD" + optional "HH:mm" in Lisbon. */
 export function toEpoch(date: string, time: string | null): number | null {
-	const m = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
-	if (!m) {
-		return null;
-	}
-	const tm = time?.match(/^(\d{2}):(\d{2})$/);
-	return toEpochInLisbonOrNull(
-		Number.parseInt(m[1] ?? "1", 10),
-		Number.parseInt(m[2] ?? "1", 10),
-		Number.parseInt(m[3] ?? "1", 10),
-		tm ? Number.parseInt(tm[1] ?? "0", 10) : 0,
-		tm ? Number.parseInt(tm[2] ?? "0", 10) : 0,
-	);
+	return ymdToEpoch(date, time);
 }
 
 /** Whether a card/venue string signals the Leiria municipality. */
@@ -171,11 +162,6 @@ export interface ScrapeDeps {
 	now?: () => number;
 	venueSearchUrl?: string;
 }
-
-const defaultSleep = (ms: number) =>
-	new Promise<void>((r) => setTimeout(r, ms));
-const randomDelay = () =>
-	MIN_DELAY_MS + Math.floor(Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS + 1));
 
 const todayStart = () =>
 	DateTime.now().setZone(LISBON_ZONE).startOf("day").toSeconds();
@@ -199,20 +185,12 @@ export async function scrape(
 	const nowStart = deps.now ? deps.now() : todayStart();
 	const venueSearchUrl = deps.venueSearchUrl ?? VENUE_SEARCH_URL;
 
-	let requests = 0;
-	let chain: Promise<unknown> = Promise.resolve();
-	const fetchPage = (url: string): Promise<string> => {
-		const next = chain.then(async () => {
-			if (requests >= MAX_REQUESTS) {
-				throw new Error(`request cap ${MAX_REQUESTS} reached`);
-			}
-			requests++;
-			await deps.sleep(randomDelay());
-			return deps.fetchText(url);
-		});
-		chain = next.catch(() => {});
-		return next;
-	};
+	const { fetchPage } = createFetchGate({
+		fetchText: deps.fetchText,
+		sleep: deps.sleep,
+		maxRequests: MAX_REQUESTS,
+		delay: () => randomDelay(MIN_DELAY_MS, MAX_DELAY_MS - MIN_DELAY_MS + 1),
+	});
 
 	let failures = 0;
 	let firstError: string | null = null;
@@ -263,7 +241,7 @@ export async function scrape(
 				if (!firstError) {
 					firstError = err instanceof Error ? err.message : String(err);
 				}
-				continue;
+				detail = null; // keep the row via the search-row fallback below
 			}
 			const raw = toRawEvent(row, detail);
 			if (raw) {

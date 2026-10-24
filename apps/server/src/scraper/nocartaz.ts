@@ -4,8 +4,11 @@ import {
 } from "@events-tracker/api/known-venues";
 import { inDistrictScope, isLeiriaDistrict, normalizePlace } from "./district";
 import { errorMessage } from "./errors";
-import { toEpochInLisbon } from "./fingerprint";
+import { lisbonDateTime, toEpochInLisbonOrNull } from "./fingerprint";
 import { defaultFetchText } from "./http";
+import { textOf } from "./lib/html";
+import { findJsonLdEvent, flattenJsonLd, jsonLdBlocks } from "./lib/jsonld";
+import { defaultSleep, randomDelay } from "./lib/timing";
 import { decodeEntities, venueTokens } from "./normalize";
 import { loadState, saveState } from "./state";
 import type { RawEvent } from "./types";
@@ -116,10 +119,6 @@ export const hubUrl = (slug: string): string => `${ORIGIN}/distrito/${slug}/`;
 export const MAX_DETAIL_REQUESTS = 400;
 /** A source date counts as live until one day past its end. */
 export const PAST_TOLERANCE_S = 86_400;
-/** Attempts on the listing page before the source reports itself failed. */
-export const PAGE_ATTEMPTS = 3;
-/** Backoff between listing attempts (ms), indexed by attempt. */
-export const PAGE_BACKOFF_MS: readonly number[] = [2_000, 6_000];
 
 /**
  * `data-genre` slug → canonical category. Slugs are the hub's own taxonomy;
@@ -208,8 +207,31 @@ export interface NocartazDetail {
 	imageUrl: string | null;
 }
 
-/** Cached parse of one detail page — the shape stored in state. */
-export type CachedDetail = NocartazDetail;
+/**
+ * Cached parse of one detail page — the shape stored in state. `cardWhen` is
+ * the date the LISTING showed (minute-precision Lisbon wall clock) when the
+ * detail was fetched: when the card's date later changes the event was
+ * rescheduled and the cached detail (whose `startAt` beats the card's) is
+ * stale, so it is refetched. Entries from before this field existed have no
+ * `cardWhen` and count as stale once.
+ */
+export type CachedDetail = NocartazDetail & { cardWhen?: string };
+
+/** The date a listing card shows, normalised for change detection; null when it shows none. */
+export function listedWhen(card: NocartazCard): string | null {
+	const epoch = epochFromRaw(card.startsAt) ?? epochFromRaw(card.date);
+	return epoch == null ? null : lisbonDateTime(epoch);
+}
+
+/** Whether a cached detail predates the date its card now lists. */
+export function isDetailStale(
+	cached: CachedDetail,
+	card: NocartazCard,
+): boolean {
+	const listed = listedWhen(card);
+	// ItemList-only cards carry no date: nothing to compare, keep the cache.
+	return listed !== null && cached.cardWhen !== listed;
+}
 
 export interface NocartazState {
 	details: Record<string, CachedDetail>;
@@ -224,6 +246,8 @@ export interface ScrapeResult {
 	pagesFetched: number;
 	/** Cards found on the hub page. */
 	discovered: number;
+	/** Saves the detail cache; the runner calls it after ingest (C7). Absent when the primary hub failed. */
+	commit?: () => void;
 }
 
 export interface ScrapeDeps {
@@ -237,22 +261,6 @@ export interface ScrapeDeps {
 	 * site publishes; tests narrow it so they do not have to stub 20 pages.
 	 */
 	hubs?: readonly string[];
-}
-
-const defaultSleep = (ms: number) =>
-	new Promise<void>((r) => setTimeout(r, ms));
-const randomDelay = () => 350 + Math.floor(Math.random() * 300);
-
-function stripTags(html: string): string {
-	return html
-		.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
-		.replace(/<br\s*\/?>/gi, " ")
-		.replace(/<\/(p|div|li|h[1-6])>/gi, " ")
-		.replace(/<[^>]*>/g, " ");
-}
-
-function textOf(html: string): string {
-	return decodeEntities(stripTags(html)).replace(/\s+/g, " ").trim();
 }
 
 function cardAttr(attrs: string, name: string): string {
@@ -382,19 +390,10 @@ export interface ItemListEntry {
 export function parseItemList(html: string): ItemListEntry[] {
 	const out: ItemListEntry[] = [];
 	const seen = new Set<string>();
-	for (const block of html.matchAll(
-		/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g,
-	)) {
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(block[1] ?? "");
-		} catch {
-			continue;
-		}
-		const nodes: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
-		for (const node of nodes) {
+	for (const block of jsonLdBlocks(html)) {
+		for (const node of flattenJsonLd(block)) {
 			const list = node as { "@type"?: unknown; itemListElement?: unknown[] };
-			if (!list || typeof list !== "object" || list["@type"] !== "ItemList") {
+			if (list["@type"] !== "ItemList") {
 				continue;
 			}
 			for (const raw of list.itemListElement ?? []) {
@@ -438,31 +437,15 @@ export function itemListCard(entry: ItemListEntry): NocartazCard {
 	};
 }
 
-/** The schema.org Event block of a detail page, when the page has one. */
+/**
+ * The detail page's event node. Deliberately NOT type-matched: the hub's
+ * pages are trusted to carry one dated node, so the first node (in any
+ * block, array or `@graph`) with a string `startDate` wins.
+ */
 function eventNode(html: string): Record<string, unknown> | null {
-	for (const block of html.matchAll(
-		/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g,
-	)) {
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(block[1] ?? "");
-		} catch {
-			continue;
-		}
-		const nodes: unknown[] = Array.isArray(parsed)
-			? parsed
-			: ((parsed as { "@graph"?: unknown[] })?.["@graph"] ?? [parsed]);
-		for (const node of nodes) {
-			if (
-				typeof node === "object" &&
-				node !== null &&
-				typeof (node as { startDate?: unknown }).startDate === "string"
-			) {
-				return node as Record<string, unknown>;
-			}
-		}
-	}
-	return null;
+	return findJsonLdEvent(html, {
+		accept: (node) => typeof node.startDate === "string",
+	});
 }
 
 function str(value: unknown): string | null {
@@ -520,17 +503,14 @@ export function epochFromRaw(raw: string | null | undefined): number | null {
 	if (!m?.[1] || !m[2] || !m[3]) {
 		return null;
 	}
-	try {
-		return toEpochInLisbon(
-			Number(m[1]),
-			Number(m[2]),
-			Number(m[3]),
-			m[4] ? Number(m[4]) : 0,
-			m[5] ? Number(m[5]) : 0,
-		);
-	} catch {
-		return null; // impossible calendar date in the source chip
-	}
+	// null for an impossible calendar date in the source chip
+	return toEpochInLisbonOrNull(
+		Number(m[1]),
+		Number(m[2]),
+		Number(m[3]),
+		m[4] ? Number(m[4]) : 0,
+		m[5] ? Number(m[5]) : 0,
+	);
 }
 
 export function toRawEvent(
@@ -657,25 +637,18 @@ export async function scrape(
 	const hubs = deps.hubs ?? DISTRICT_HUBS;
 	const primary = hubs[0] ?? "leiria";
 
-	let html: string | null = null;
-	for (let attempt = 0; attempt < PAGE_ATTEMPTS; attempt++) {
-		try {
-			await delay();
-			html = await deps.fetchText(hubUrl(primary));
-			pagesFetched++;
-			break;
-		} catch (err) {
-			firstError ??= errorMessage(err);
-			if (attempt < PAGE_ATTEMPTS - 1) {
-				await deps.sleep(PAGE_BACKOFF_MS[attempt] ?? 5_000);
-			}
-		}
-	}
-	if (html === null) {
+	// One attempt: http.ts owns retries (and the 4xx/Retry-After policy), so
+	// wrapping it here would stack up to 9 requests per page.
+	let html: string;
+	try {
+		await delay();
+		html = await deps.fetchText(hubUrl(primary));
+		pagesFetched++;
+	} catch (err) {
 		return {
 			events: [],
 			failures: failures + 1,
-			firstError: `${hubUrl(primary)}: ${firstError ?? "unknown error"}`,
+			firstError: `${hubUrl(primary)}: ${errorMessage(err)}`,
 			pagesFetched,
 			discovered: 0,
 		};
@@ -699,6 +672,12 @@ export async function scrape(
 	}
 	for (const entry of parseItemList(html)) {
 		push(itemListCard(entry));
+	}
+	if (candidates.length === 0) {
+		// The primary hub always lists events: a page that parses to nothing is a
+		// markup change (or a challenge page), not a quiet day.
+		failures++;
+		firstError ??= `${hubUrl(primary)}: listing parsed to zero cards`;
 	}
 
 	// Then every other district hub, best effort. A row NoCartaz cannot localize
@@ -739,7 +718,12 @@ export async function scrape(
 	const details: Record<string, CachedDetail> = {};
 
 	for (const card of cards) {
-		let detail = cached[card.id] ?? null;
+		const hit = cached[card.id];
+		// A cached detail is reused only while the card still lists the date it
+		// was fetched under; a rescheduled event refetches (its old startAt would
+		// otherwise beat the card's fresh date forever).
+		let detail: CachedDetail | null =
+			hit && !isDetailStale(hit, card) ? hit : null;
 		if (!detail) {
 			if (detailRequests < MAX_DETAIL_REQUESTS) {
 				try {
@@ -747,7 +731,11 @@ export async function scrape(
 					const detailHtml = await deps.fetchText(card.url);
 					pagesFetched++;
 					detailRequests++;
-					detail = parseDetail(detailHtml);
+					const when = listedWhen(card);
+					detail = {
+						...parseDetail(detailHtml),
+						...(when ? { cardWhen: when } : {}),
+					};
 				} catch (err) {
 					// Keep the card: its own attributes are enough for a card.
 					// Nothing is cached, so the detail is retried next run.
@@ -769,13 +757,14 @@ export async function scrape(
 		}
 	}
 
-	deps.saveState({ details });
-
 	return {
 		events,
 		failures,
 		firstError,
 		pagesFetched,
 		discovered: cards.length,
+		// Deferred (C7): the cache is saved only after ingest committed, so a
+		// failed ingest refetches the same details instead of trusting them.
+		commit: () => deps.saveState({ details }),
 	};
 }

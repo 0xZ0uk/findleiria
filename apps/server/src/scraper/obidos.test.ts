@@ -5,10 +5,12 @@ import { isLeiriaDistrict } from "./district";
 import { toEpochInLisbon } from "./fingerprint";
 import {
 	categoryForTitle,
+	ETN_SITEMAP,
 	parseDate,
 	parseDetail,
 	parseEventSitemap,
 	resolveVenue,
+	scrape,
 	slugFor,
 	toRawEvent,
 } from "./obidos";
@@ -255,6 +257,47 @@ describe("gate (tests run via a mock isInScope like production wiring)", () => {
 	});
 });
 
+describe("S7 scrape: discovery failures are counted", () => {
+	const mk = (fetchText: (u: string) => Promise<string>) => ({
+		fetchText,
+		sleep: async () => {},
+		loadState: () => ({ lastmod: {} }),
+		saveState: () => {},
+		now: NOW,
+	});
+
+	test("a dead sitemap fetch is failures: 1 with the url in the message", async () => {
+		const res = await scrape(
+			mk(async () => {
+				throw new Error("HTTP 503");
+			}),
+		);
+		expect(res.events).toEqual([]);
+		expect(res.failures).toBe(1);
+		expect(res.firstError).toContain(ETN_SITEMAP);
+		expect(res.firstError).toContain("HTTP 503");
+	});
+
+	test("a sitemap that parses to zero urls is a failure", async () => {
+		const res = await scrape(mk(async () => "<html>Just a moment...</html>"));
+		expect(res.failures).toBe(1);
+		expect(res.firstError).toContain("zero event urls");
+	});
+
+	test("an unchanged watermark (zero changed urls) is NOT a failure", async () => {
+		const lastmod = Object.fromEntries(
+			parseEventSitemap(sitemapXml).map((e) => [e.url, e.lastmod]),
+		);
+		const res = await scrape({
+			...mk(async () => sitemapXml),
+			loadState: () => ({ lastmod }),
+		});
+		expect(res.failures).toBe(0);
+		expect(res.events).toEqual([]);
+		expect(res.discovered).toBeGreaterThan(0);
+	});
+});
+
 describe("slugFor", () => {
 	test("ob- prefix from the event slug", () => {
 		expect(
@@ -280,3 +323,90 @@ describe("categoryForTitle", () => {
 function folioUrl(): string {
 	return "https://agenda.obidos.pt/evento/folio-festival-literario-internacional-de-obidos/";
 }
+
+describe("S13 scrape(): happy path and a dead detail page", () => {
+	const BASE = "https://agenda.obidos.pt/evento";
+	const FOLIO = `${BASE}/folio-festival-literario-internacional-de-obidos/`;
+	const NATAL = `${BASE}/obidos-vila-natal/`;
+	const PAST = `${BASE}/dia-da-freguesia-a-dos-negros/`;
+	const DEAD = `${BASE}/pagina-morta/`;
+	const pages = new Map([
+		[FOLIO, folioHtml],
+		[NATAL, vilaNatalHtml],
+		[PAST, diaFreguesiaHtml],
+	]);
+	const sitemap = `<urlset>${[FOLIO, NATAL, PAST, DEAD]
+		.map(
+			(u) =>
+				`<url><loc><![CDATA[${u}]]></loc><lastmod><![CDATA[2026-09-08T10:00:00+00:00]]></lastmod></url>`,
+		)
+		.join("")}</urlset>`;
+
+	function run(initial: Record<string, string> = {}) {
+		const fetched: string[] = [];
+		const saved: { lastmod: Record<string, string> }[] = [];
+		const sleeps: number[] = [];
+		const promise = scrape(
+			{
+				fetchText: async (url) => {
+					fetched.push(url);
+					if (url === ETN_SITEMAP) {
+						return sitemap;
+					}
+					const html = pages.get(url);
+					if (!html) {
+						throw new Error(`GET ${url} -> HTTP 404`);
+					}
+					return html;
+				},
+				sleep: async (ms) => {
+					sleeps.push(ms);
+				},
+				loadState: () => ({ lastmod: initial }),
+				saveState: (s) => {
+					saved.push(s);
+				},
+				now: NOW,
+			},
+			isLeiriaDistrict,
+		);
+		return { promise, fetched, saved, sleeps };
+	}
+
+	test("emits the dated in-district events, drops the past one, counts the dead page", async () => {
+		const { promise, saved, sleeps } = run();
+		const res = await promise;
+		expect(res.events.map((e) => e.slug).sort()).toEqual([
+			"ob-folio-festival-literario-internacional-de-obidos",
+			"ob-obidos-vila-natal",
+		]);
+		expect(res.discovered).toBe(4);
+		expect(res.failures).toBe(1);
+		expect(res.firstError).toContain("pagina-morta");
+		// sitemap + 3 good details are "pages fetched"; the dead one is not
+		expect(res.pagesFetched).toBe(4);
+		// every request, the failed one included, is preceded by a polite delay
+		expect(sleeps).toHaveLength(5);
+		expect(sleeps.every((ms) => ms >= 350 && ms <= 649)).toBe(true);
+		// watermark: saved only when the runner commits after ingest (C7);
+		// fetched urls are recorded (the past one included: a deliberate
+		// skip), the dead one is not (retried next run)
+		expect(saved).toHaveLength(0);
+		res.commit?.();
+		expect(saved).toHaveLength(1);
+		expect(Object.keys(saved[0]?.lastmod ?? {}).sort()).toEqual(
+			[FOLIO, NATAL, PAST].sort(),
+		);
+	});
+
+	test("a second run with the saved watermark fetches only the sitemap and the dead url", async () => {
+		const watermark = Object.fromEntries(
+			[FOLIO, NATAL, PAST].map((u) => [u, "2026-09-08T10:00:00+00:00"]),
+		);
+		const { promise, fetched } = run(watermark);
+		const res = await promise;
+		expect(fetched).toEqual([ETN_SITEMAP, DEAD]);
+		expect(res.events).toEqual([]);
+		expect(res.failures).toBe(1);
+	});
+});
