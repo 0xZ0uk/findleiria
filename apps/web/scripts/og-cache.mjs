@@ -49,6 +49,11 @@ export function cardKey(input, fingerprint) {
 		.slice(0, 32);
 }
 
+/** Distinct keys a build over `entries` needs (identical card text shares one). */
+export function liveCardKeys(entries, fingerprint) {
+	return [...new Set(entries.map((entry) => cardKey(entry, fingerprint)))];
+}
+
 /** Run `fn` over `items` with at most `limit` in flight; results keep order. */
 export async function mapPool(items, limit, fn) {
 	const results = new Array(items.length);
@@ -88,7 +93,8 @@ function readCached(file) {
  * @param {string} opts.fingerprint  from templateFingerprint
  * @param {(input) => Promise<Buffer>} opts.render
  * @param {number} [opts.concurrency]
- * @returns {Promise<{cards: number, rendered: number, reused: number, evicted: number}>}
+ * @returns {Promise<{cards: number, rendered: number, reused: number, evicted: number, renderedKeys: string[]}>}
+ *   `renderedKeys` are the cache keys drawn this build (what is new to a remote store)
  */
 export async function buildCards({
 	entries,
@@ -108,7 +114,7 @@ export async function buildCards({
 		if (!byKey.has(key)) byKey.set(key, entry);
 	}
 
-	let rendered = 0;
+	const renderedKeys = [];
 	let reused = 0;
 	await mapPool([...byKey], concurrency, async ([key, entry]) => {
 		const file = path.join(cacheDir, `${key}.png`);
@@ -121,7 +127,7 @@ export async function buildCards({
 		const tmp = `${file}.${process.pid}.tmp`;
 		fs.writeFileSync(tmp, png);
 		fs.renameSync(tmp, file);
-		rendered += 1;
+		renderedKeys.push(key);
 	});
 
 	for (const entry of entries) {
@@ -142,5 +148,11 @@ export async function buildCards({
 		}
 	}
 
-	return { cards: entries.length, rendered, reused, evicted };
+	return {
+		cards: entries.length,
+		rendered: renderedKeys.length,
+		reused,
+		evicted,
+		renderedKeys,
+	};
 }

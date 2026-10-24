@@ -22,6 +22,7 @@ export type CoercedEnvSchema = {
   
   /**
    * **TURSO_AUTH_TOKEN** 🔐 _sensitive_  
+   * EVENTS database (not the auth database; that one is AUTH_TURSO_TOKEN).  
    * Turso READ-ONLY token. Two consumers: the web build (the token for  
    * TURSO_DATABASE_URL) and the events client when DATABASE_URL is remote. Not  
    * needed for `file:` URLs.  
@@ -97,6 +98,24 @@ export type CoercedEnvSchema = {
   VITE_UMAMI_WEBSITE_ID?: string;
   
   /**
+   * **R2_ACCOUNT_ID**  
+   * Cloudflare account ID; the S3 endpoint is https://<id>.r2.cloudflarestorage.com.  
+   */
+  R2_ACCOUNT_ID?: string;
+  
+  /** **R2_ACCESS_KEY_ID** 🔐 _sensitive_ */
+  R2_ACCESS_KEY_ID?: string;
+  
+  /** **R2_SECRET_ACCESS_KEY** 🔐 _sensitive_ */
+  R2_SECRET_ACCESS_KEY?: string;
+  
+  /**
+   * **R2_BUILD_CACHE_BUCKET**  
+   * Bucket holding `og-cards/v<N>/<key>.png`.  
+   */
+  R2_BUILD_CACHE_BUCKET?: string;
+  
+  /**
    * **AUTH_DATABASE_URL**  
    * libSQL URL of the auth database. `file:` locally; `libsql://...` in production.  
    */
@@ -104,7 +123,9 @@ export type CoercedEnvSchema = {
   
   /**
    * **AUTH_TURSO_TOKEN** 🔐 _sensitive_  
-   * Read/write token. Only needed when AUTH_DATABASE_URL is a remote Turso database.  
+   * AUTH database (users, sessions, saved events; not the events database, whose  
+   * token is TURSO_AUTH_TOKEN). Read/write token for AUTH_DATABASE_URL. Only  
+   * needed when AUTH_DATABASE_URL is a remote Turso database.  
    */
   AUTH_TURSO_TOKEN?: string;
   
@@ -172,7 +193,7 @@ export type CoercedEnvSchema = {
   
 };
 
-type _CoercedEnvSchema_aca46f6d = CoercedEnvSchema;
+type _CoercedEnvSchema_c24d3c4a = CoercedEnvSchema;
 
 export type EnvSchemaAsStrings = {
   [Property in keyof CoercedEnvSchema]:
@@ -180,11 +201,11 @@ export type EnvSchemaAsStrings = {
       : (NonNullable<CoercedEnvSchema[Property]> extends boolean ? ('true' | 'false') : string)
 };
 
-type _EnvSchemaAsStrings_aca46f6d = EnvSchemaAsStrings;
+type _EnvSchemaAsStrings_c24d3c4a = EnvSchemaAsStrings;
 declare global {
 
   // add types for global process.env
   namespace NodeJS {
-    interface ProcessEnv extends _EnvSchemaAsStrings_aca46f6d {}
+    interface ProcessEnv extends _EnvSchemaAsStrings_c24d3c4a {}
   }
 }
