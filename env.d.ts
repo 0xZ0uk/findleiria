@@ -23,9 +23,9 @@ export type CoercedEnvSchema = {
   /**
    * **TURSO_AUTH_TOKEN** 🔐 _sensitive_  
    * EVENTS database (not the auth database; that one is AUTH_TURSO_TOKEN).  
-   * Turso READ-ONLY token. Two consumers: the web build (the token for  
-   * TURSO_DATABASE_URL) and the events client when DATABASE_URL is remote. Not  
-   * needed for `file:` URLs.  
+   * Token for the events client when DATABASE_URL is a remote libSQL URL. Not  
+   * needed for `file:` URLs. The web build no longer reads it: it reads D1  
+   * (D1_READ_API_TOKEN).  
    */
   TURSO_AUTH_TOKEN?: string;
   
@@ -57,33 +57,26 @@ export type CoercedEnvSchema = {
   SCRAPE_CONCURRENCY?: number;
   
   /**
-   * **TURSO_DATABASE_URL** 🔐 _sensitive_  
-   * The Turso database the site's build reads. Required by the web build (it  
-   * checks and fails with a clear message); unused in dev.  
-   * `file:/abs/path/local.db` (no token) builds against a local database.  
-   * Sensitive so it is redacted and can never be inlined into the client bundle.  
-   */
-  TURSO_DATABASE_URL?: string;
-  
-  /**
    * **CLOUDFLARE_ACCOUNT_ID**  
    * Cloudflare account that owns the `findleiria-events` D1 database  
-   * (dashboard URL, or `wrangler whoami`). db:publish needs it; wrangler reads  
-   * it too (`db:migrate:remote`).  
+   * (dashboard URL, or `wrangler whoami`). db:publish and the web build need it;  
+   * wrangler reads it too (`db:migrate:remote`).  
    */
   CLOUDFLARE_ACCOUNT_ID?: string;
   
   /**
    * **EVENTS_D1_ID**  
    * Id (uuid) of the `findleiria-events` D1 database db:publish mirrors local.db  
-   * into (`wrangler d1 info findleiria-events`).  
+   * into and the web build reads the snapshot from (`wrangler d1 info  
+   * findleiria-events`).  
    */
   EVENTS_D1_ID?: string;
   
   /**
    * **D1_RW_API_TOKEN** 🔐 _sensitive_  
    * Cloudflare API token with D1 EDIT permission, for db:publish only (keep it on  
-   * the cron machine). The build gets a separate read-only D1 token.  
+   * the cron machine). The build gets a separate read-only D1 token  
+   * (D1_READ_API_TOKEN).  
    */
   D1_RW_API_TOKEN?: string;
   
@@ -97,10 +90,21 @@ export type CoercedEnvSchema = {
   
   /**
    * **SNAPSHOT_DATABASE_URL**  
-   * Dev only: the database `pnpm dev` / `pnpm --filter web snapshot` reads  
-   * (defaults to the repo's local.db).  
+   * The database `pnpm dev` / `pnpm --filter web snapshot` reads (defaults to the  
+   * repo's local.db). A `file:` URL here also makes `pnpm --filter web build`  
+   * read that SQLite file instead of D1.  
    */
   SNAPSHOT_DATABASE_URL?: string;
+  
+  /**
+   * **D1_READ_API_TOKEN** 🔐 _sensitive_  
+   * Cloudflare API token with D1 READ permission only, for the web build: it  
+   * reads the events snapshot from D1 over the REST API (CLOUDFLARE_ACCOUNT_ID +  
+   * EVENTS_D1_ID + this). Server-side name on purpose: never VITE_-prefixed, or  
+   * Vite would inline it into the bundle (the build also fails if it shows up  
+   * there). Unset with a `file:` SNAPSHOT_DATABASE_URL for a local build.  
+   */
+  D1_READ_API_TOKEN?: string;
   
   /**
    * **VITE_CF_BEACON_TOKEN**  
@@ -184,7 +188,7 @@ export type CoercedEnvSchema = {
   
 };
 
-type _CoercedEnvSchema_8f477cd8 = CoercedEnvSchema;
+type _CoercedEnvSchema_397d2aa1 = CoercedEnvSchema;
 
 export type EnvSchemaAsStrings = {
   [Property in keyof CoercedEnvSchema]:
@@ -192,11 +196,11 @@ export type EnvSchemaAsStrings = {
       : (NonNullable<CoercedEnvSchema[Property]> extends boolean ? ('true' | 'false') : string)
 };
 
-type _EnvSchemaAsStrings_8f477cd8 = EnvSchemaAsStrings;
+type _EnvSchemaAsStrings_397d2aa1 = EnvSchemaAsStrings;
 declare global {
 
   // add types for global process.env
   namespace NodeJS {
-    interface ProcessEnv extends _EnvSchemaAsStrings_8f477cd8 {}
+    interface ProcessEnv extends _EnvSchemaAsStrings_397d2aa1 {}
   }
 }

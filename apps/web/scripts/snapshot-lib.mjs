@@ -14,7 +14,7 @@ export const REPO_DIR = path.resolve(APP_DIR, "../..");
 const BUILDER = path.join(REPO_DIR, "packages/api/src/snapshot.ts");
 
 /**
- * `{ buildSnapshot, writeSnapshot, createReadDb }` from packages/api.
+ * `{ buildSnapshot, writeSnapshot, createReadDb, createD1ReadDb }` from packages/api.
  * Workspace packages are TS source, so they must be transformed, not handed
  * to Node as externals.
  */
@@ -31,29 +31,90 @@ export async function loadSnapshotBuilder() {
 
 export const isLocalUrl = (url) => url.startsWith("file:");
 
+const D1_VARS = ["CLOUDFLARE_ACCOUNT_ID", "EVENTS_D1_ID", "D1_READ_API_TOKEN"];
+
 /**
- * The production build's database: TURSO_DATABASE_URL + TURSO_AUTH_TOKEN
- * (read-only), from the environment: the Vercel project env, or locally the
- * repo-root .env files injected by `varlock run` (see apps/web/package.json).
+ * Where the production build reads the snapshot from, from the environment
+ * (the Workers Builds env, or locally the repo-root .env files injected by
+ * `varlock run`, see apps/web/package.json):
+ *
+ *  - `{ kind: "file", url }`: a `file:` SNAPSHOT_DATABASE_URL, a local SQLite
+ *    file read through libSQL (a local build against local.db or a copy). An
+ *    explicit local choice wins over D1.
+ *  - `{ kind: "d1", accountId, databaseId, token }`: the events D1 database
+ *    over the REST API, with the READ-ONLY token.
+ *
  * Server-side names on purpose: nothing here may be prefixed VITE_, or Vite
- * would inline it into the bundle (the schema also marks both @sensitive). A
- * `file:` URL needs no token, which is how a local build runs.
+ * would inline it into the bundle (the schema also marks the token
+ * @sensitive, and the leak guard in prerender-events.mjs checks the bundle).
+ * Anything else fails the build with a message saying what is missing.
  */
-export function buildCredentials() {
-	const url = process.env.TURSO_DATABASE_URL;
-	const token = process.env.TURSO_AUTH_TOKEN;
-	if (!url) {
+export function buildSource(env = process.env) {
+	const snapshotUrl = env.SNAPSHOT_DATABASE_URL;
+	if (snapshotUrl) {
+		if (!isLocalUrl(snapshotUrl)) {
+			throw new Error(
+				"SNAPSHOT_DATABASE_URL must be a `file:` URL for the build. The production build reads D1: unset it and set " +
+					`${D1_VARS.join(", ")}.`,
+			);
+		}
+		return { kind: "file", url: snapshotUrl };
+	}
+	const missing = D1_VARS.filter((name) => !env[name]);
+	if (missing.length === D1_VARS.length) {
 		throw new Error(
-			"Missing TURSO_DATABASE_URL (Vercel project env, or the repo-root .env / .env.local). " +
-				"The build reads the events from it to write the static snapshot.",
+			`Missing ${D1_VARS.join(", ")} (Workers Builds env, or the repo-root .env / .env.local). ` +
+				"The build reads the events from D1 to write the static snapshot. " +
+				"For a local build, set SNAPSHOT_DATABASE_URL=file:/abs/path/local.db instead.",
 		);
 	}
-	if (!isLocalUrl(url) && !token) {
+	if (missing.length > 0) {
 		throw new Error(
-			`Missing TURSO_AUTH_TOKEN for ${new URL(url).hostname}: a remote Turso database needs the read-only token.`,
+			`Missing ${missing.join(", ")}: reading the events from D1 needs ${D1_VARS.join(", ")} ` +
+				"(the token must be the READ-ONLY D1 one).",
 		);
 	}
-	return { url, token: token || undefined };
+	return {
+		kind: "d1",
+		accountId: env.CLOUDFLARE_ACCOUNT_ID,
+		databaseId: env.EVENTS_D1_ID,
+		token: env.D1_READ_API_TOKEN,
+	};
+}
+
+/** Open the drizzle database a `buildSource()` names. */
+export function openSnapshotDb(builder, source) {
+	if (source.kind === "d1") {
+		return builder.createD1ReadDb({
+			accountId: source.accountId,
+			databaseId: source.databaseId,
+			token: source.token,
+			...(source.baseUrl ? { baseUrl: source.baseUrl } : {}),
+		});
+	}
+	return builder.createReadDb(source.url);
+}
+
+/** Release the handle: libSQL has a connection to close, D1 REST has none. */
+export function closeSnapshotDb(db) {
+	db.$client?.close();
+}
+
+/**
+ * Strings that must never appear in a client chunk: the database's identity
+ * and credential, the API host path they are used against, and any libSQL
+ * client. Empty values are dropped (`includes("")` is always true).
+ */
+export function bundleNeedles(source) {
+	const needles = ["libsql"];
+	if (source.kind === "d1") {
+		needles.push(
+			source.databaseId,
+			source.token,
+			"api.cloudflare.com/client/v4/accounts",
+		);
+	}
+	return needles.filter(Boolean);
 }
 
 /** The dev snapshot's database: SNAPSHOT_DATABASE_URL, else the repo's local.db. */
@@ -62,10 +123,4 @@ export function devDatabaseUrl() {
 		process.env.SNAPSHOT_DATABASE_URL ||
 		`file:${path.join(REPO_DIR, "local.db")}`
 	);
-}
-
-/** Hostname of a remote database URL; null for a local file. */
-export function remoteHost(url) {
-	if (isLocalUrl(url)) return null;
-	return new URL(url.replace(/^libsql:/, "https:")).hostname;
 }

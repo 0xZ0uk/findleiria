@@ -5,7 +5,8 @@
 // the dev API uses (packages/api/src/snapshot.ts).
 //
 // Run from apps/web AFTER `vite build`:  node scripts/prerender-events.mjs
-// Env: TURSO_DATABASE_URL + TURSO_AUTH_TOKEN (read-only; never VITE_-prefixed).
+// Env: CLOUDFLARE_ACCOUNT_ID + EVENTS_D1_ID + D1_READ_API_TOKEN (read-only;
+// never VITE_-prefixed), or a `file:` SNAPSHOT_DATABASE_URL for a local build.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -14,9 +15,11 @@ import { OG_TEMPLATE_FILES, renderOgCard } from "./og-card.mjs";
 import { createR2Cache, formatR2Stats } from "./og-r2.mjs";
 import {
 	APP_DIR,
-	buildCredentials,
+	buildSource,
+	bundleNeedles,
+	closeSnapshotDb,
 	loadSnapshotBuilder,
-	remoteHost,
+	openSnapshotDb,
 } from "./snapshot-lib.mjs";
 
 const DIST = path.join(APP_DIR, "dist");
@@ -63,15 +66,14 @@ function assertSnapshotOnDisk(snapshot) {
 
 // ---------------------------------------------------- client bundle leak guard
 // The bundle used to carry the Turso URL and token. Nothing in it may talk to
-// the database now: fail the build if the database host or a libSQL client
-// shows up in any chunk.
-function assertBundleHasNoDatabase(dbUrl) {
+// the database now: fail the build if the D1 database id, the read token, the
+// Cloudflare API path or a libSQL client shows up in any chunk.
+function assertBundleHasNoDatabase(source) {
 	const assetsDir = path.join(DIST, "assets");
 	if (!fs.existsSync(assetsDir)) {
 		throw new Error(`Missing ${assetsDir} — run this after vite build.`);
 	}
-	const host = remoteHost(dbUrl);
-	const needles = ["libsql", "VITE_TURSO", ...(host ? [host] : [])];
+	const needles = bundleNeedles(source);
 	for (const file of fs
 		.readdirSync(assetsDir)
 		.filter((f) => f.endsWith(".js"))) {
@@ -280,12 +282,15 @@ function buildJsonLd(row) {
 // ---------------------------------------------------------------- main
 async function main() {
 	const t0 = Date.now();
-	const { url: dbUrl, token } = buildCredentials();
-	assertBundleHasNoDatabase(dbUrl);
+	const source = buildSource();
+	assertBundleHasNoDatabase(source);
 
-	const { buildSnapshot, writeSnapshot, createReadDb, EMBEDDED_EVENT_ID } =
-		await loadSnapshotBuilder();
-	const db = createReadDb(dbUrl, token);
+	const builder = await loadSnapshotBuilder();
+	const { buildSnapshot, writeSnapshot, EMBEDDED_EVENT_ID } = builder;
+	console.log(
+		`[prerender] snapshot source: ${source.kind === "d1" ? "Cloudflare D1 (REST, read-only)" : source.url}`,
+	);
+	const db = openSnapshotDb(builder, source);
 	let snapshot;
 	try {
 		snapshot = await buildSnapshot(db);
@@ -293,7 +298,7 @@ async function main() {
 		console.error("[prerender] database read FAILED:", err);
 		process.exit(1);
 	} finally {
-		db.$client.close();
+		closeSnapshotDb(db);
 	}
 
 	// Every event, newest first, with its description: pages, cards, sitemap.

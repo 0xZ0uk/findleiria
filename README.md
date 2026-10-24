@@ -62,8 +62,9 @@ How it is wired:
   committed so `tsc` works on a fresh clone.
 - Moving from the old per-app files: merge `apps/server/.env`,
   `apps/web/.env` and `packages/db/.env` into the root `.env.local`, then
-  delete them (they are no longer read). `TURSO_AUTH_TOKEN` is the
-  **read-only** token; publishing uses the D1-edit token `D1_RW_API_TOKEN`.
+  delete them (they are no longer read). The web build reads the events
+  from D1 with the **read-only** token `D1_READ_API_TOKEN`; publishing uses the
+  D1-edit token `D1_RW_API_TOKEN`.
 - Secrets can be kept encrypted at rest: set a value to `varlock(prompt)` in
   `.env.local` and run `pnpm env:check` (see varlock's local encryption docs).
 - The varlock CLI sends anonymous usage telemetry; opt out once with
@@ -242,7 +243,10 @@ to `master` (`.github/workflows/ci.yml`; no secrets needed).
 
 Production is a **static SPA built from a daily snapshot of Turso**. The browser
 never talks to the database: the Vercel build reads Turso once and writes
-everything the site serves into `apps/web/dist/`:
+everything the site serves into `apps/web/dist/`. The build reads the events
+from the `findleiria-events` D1 database over the D1 REST API with a read-only
+token (`CLOUDFLARE_ACCOUNT_ID`, `EVENTS_D1_ID`, `D1_READ_API_TOKEN`; a
+`file:` `SNAPSHOT_DATABASE_URL` reads a local SQLite file instead):
 
 - `data/agenda.json`: the agenda (dated rows a little wider than the 90-day
   window, which the page trims against the reader's clock; the undated
@@ -253,8 +257,8 @@ everything the site serves into `apps/web/dist/`:
   request-free first paint), `og/<slug>.png`, `sitemap.xml`
 
 The daily flow (`pnpm --filter server daily`, see Cron automation) is scrape →
-`db:publish` (mirrors `local.db` into D1; mid-migration, the build below still
-reads Turso until it is switched to D1) → deploy hook → Vercel rebuild. There is no Hono process in production; the local
+`db:publish` (mirrors `local.db` into D1; the build below reads that D1
+database) → deploy hook → Vercel rebuild. There is no Hono process in production; the local
 scraper is the only writer.
 
 ```bash
@@ -272,8 +276,9 @@ the schema's `#web` and `#auth` items:
 
 | Variable | Action | Value |
 | --- | --- | --- |
-| `TURSO_DATABASE_URL` | **add** (if absent) | the `libsql://…` URL |
-| `TURSO_AUTH_TOKEN` | **add** (if absent) | the **read-only** token; build-time only |
+| `CLOUDFLARE_ACCOUNT_ID`, `EVENTS_D1_ID` | **add** | the account and the `findleiria-events` D1 id |
+| `D1_READ_API_TOKEN` | **add** | Cloudflare API token with D1 **read** only; build-time only |
+| `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | **delete** | the build no longer reads Turso |
 | `AUTH_DATABASE_URL` | **add** | `libsql://…` of the separate auth database |
 | `AUTH_TURSO_TOKEN` | **add** | its read/write token |
 | `BETTER_AUTH_SECRET` | **add** | 32+ chars (`openssl rand -base64 48`) |
@@ -307,12 +312,13 @@ malformed auth variable fails the deploy rather than the first sign-in. The
 functions read `process.env` as Vercel injects it: a deployment's env cannot
 change without a rebuild, so they run on values the build already checked.
 After the prerender, `varlock scan ./dist` fails the build if any `@sensitive`
-value present in the build env (tokens, auth secrets, the Turso URL) appears
+value present in the build env (tokens, auth secrets) appears
 anywhere in the published output.
 
 The build fails, and Vercel keeps serving the previous deployment, if
-`TURSO_DATABASE_URL` is missing, the database has no events, a snapshot file is
-missing or empty, or any JS chunk contains the database host or a libSQL client.
+the D1 variables are missing, the database has no events, a snapshot file is
+missing or empty, or any JS chunk contains the D1 database id, the read token,
+the Cloudflare API path or a libSQL client.
 Since the old read-only token shipped in every bundle, consider rotating it:
 `turso db tokens invalidate unreal-events` revokes every token for the
 database, so then issue a new read-only one for Vercel and a new read/write one
