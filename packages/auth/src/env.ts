@@ -1,36 +1,56 @@
-import "dotenv/config";
-import { createEnv } from "@t3-oss/env-core";
-import { z } from "zod";
+/// <reference path="../../../env.d.ts" />
 
 /**
- * Env for the auth runtime only.
+ * Env for the auth runtime only, read from `process.env`.
  *
  * Deliberately separate from `@events-tracker/env/server`: the auth function
  * lives on Vercel and has no business requiring the events `DATABASE_URL` or
  * `CORS_ORIGIN` just to boot. Two databases, two env modules.
+ *
+ * Nothing is validated here. The rules (required, the 32-char secret, SMTP_*
+ * required when NODE_ENV=production, URL shapes) live in the repo-root
+ * `.env.schema` under `#auth`, and varlock enforces them before this code runs:
+ * locally every script goes through `varlock run`, and on Vercel the build
+ * command validates the project env with NODE_ENV=production. A deployment's
+ * env cannot change without a new build, so the functions boot on values the
+ * build already checked. `process.env` is typed from the schema (`env.d.ts`).
+ *
+ * What stays here is what the raw environment cannot carry: the schema's
+ * defaults (Vercel injects none) and the string-to-number/boolean coercion.
+ * Read once at import, as before; empty strings count as unset.
  */
-export const authEnv = createEnv({
-	server: {
-		// libSQL URL of the auth database. `file:...` in dev, `libsql://...` in prod.
-		AUTH_DATABASE_URL: z.string().min(1),
-		// Only set when AUTH_DATABASE_URL points at a remote Turso database.
-		AUTH_TURSO_TOKEN: z.string().min(1).optional(),
-		// Signs session cookies. Rotating it logs everyone out.
-		BETTER_AUTH_SECRET: z.string().min(32),
-		// Public origin of the app, used for callback URLs and trusted origins.
-		BETTER_AUTH_URL: z.url(),
-		// Comma-separated extra origins (vercel previews, localhost ports).
-		AUTH_TRUSTED_ORIGINS: z.string().optional(),
-		GOOGLE_CLIENT_ID: z.string().min(1),
-		GOOGLE_CLIENT_SECRET: z.string().min(1),
-		NODE_ENV: z
-			.enum(["development", "production", "test"])
-			.default("development"),
-	},
-	runtimeEnv: process.env,
-	skipValidation: !!process.env.SKIP_ENV_VALIDATION,
-	emptyStringAsUndefined: true,
-});
+const read = (value: string | undefined) => (value === "" ? undefined : value);
+
+/** varlock's `@type=boolean` spellings of true; the rest it accepts are false. */
+const TRUE = new Set(["t", "true", "yes", "on", "1"]);
+
+type NodeEnv = "development" | "production" | "test";
+
+export const authEnv = {
+	// libSQL URL of the auth database. `file:...` in dev, `libsql://...` in prod.
+	AUTH_DATABASE_URL: process.env.AUTH_DATABASE_URL,
+	// Only set when AUTH_DATABASE_URL points at a remote Turso database.
+	AUTH_TURSO_TOKEN: read(process.env.AUTH_TURSO_TOKEN),
+	// Signs session cookies. Rotating it logs everyone out.
+	BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
+	// Public origin of the app, used for callback URLs and trusted origins.
+	BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
+	// Comma-separated extra origins (vercel previews, localhost ports).
+	AUTH_TRUSTED_ORIGINS: read(process.env.AUTH_TRUSTED_ORIGINS),
+	GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+	GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+	// Outgoing mail (email verification). When unset outside production the
+	// mailer prints the message instead of sending it.
+	SMTP_HOST: read(process.env.SMTP_HOST),
+	SMTP_PORT: Number(read(process.env.SMTP_PORT) ?? 587),
+	// true = implicit TLS (port 465). false = plain, upgraded by STARTTLS (587).
+	SMTP_SECURE: TRUE.has(read(process.env.SMTP_SECURE)?.toLowerCase() ?? ""),
+	SMTP_USER: read(process.env.SMTP_USER),
+	SMTP_PASS: read(process.env.SMTP_PASS),
+	// Sender, e.g. "FindLeiria <no-reply@example.com>".
+	SMTP_FROM: read(process.env.SMTP_FROM),
+	NODE_ENV: (read(process.env.NODE_ENV) ?? "development") as NodeEnv,
+};
 
 /**
  * Loopback spellings of the public origin, added in development only.

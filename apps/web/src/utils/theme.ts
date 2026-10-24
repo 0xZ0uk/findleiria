@@ -35,7 +35,10 @@ function applyTheme(theme: Theme) {
 
 	// Tint the browser chrome from the token itself rather than a second hex.
 	const canvas = getComputedStyle(root).getPropertyValue("--background").trim();
-	if (canvas) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", canvas);
+	if (canvas)
+		document
+			.querySelector('meta[name="theme-color"]')
+			?.setAttribute("content", canvas);
 }
 
 export function useTheme() {
@@ -57,5 +60,12 @@ export function useTheme() {
 		setThemeState(next);
 	}, []);
 
-	return { theme, setTheme, toggle: useCallback(() => setTheme(theme === "dark" ? "light" : "dark"), [setTheme, theme]) };
+	return {
+		theme,
+		setTheme,
+		toggle: useCallback(
+			() => setTheme(theme === "dark" ? "light" : "dark"),
+			[setTheme, theme],
+		),
+	};
 }

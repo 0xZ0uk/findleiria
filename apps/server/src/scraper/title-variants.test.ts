@@ -148,8 +148,10 @@ describe("RULE 4 — title variants of one occurrence", () => {
 		const components = planComponents([a, b]);
 		expect(components).toHaveLength(1);
 		const plan = planMerge(components[0] ?? []);
-		expect(plan.keepers.map((k) => k.id)).toEqual([408]);
-		expect(plan.absorbed.get(549)).toBe(408);
+		// festasearraiais is now ranked (C2) and outranks viralagenda, so the
+		// festa's own row is the canonical one and the viralagenda twin folds in.
+		expect(plan.keepers.map((k) => k.id)).toEqual([549]);
+		expect(plan.absorbed.get(408)).toBe(549);
 	});
 
 	test("per-day rows fuse into the multi-day span of the same festa", () => {

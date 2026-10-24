@@ -12,6 +12,17 @@ import * as schema from "./schema.js";
  * visitor a way to read emails.
  */
 export function createAuthDb() {
+	// Tests migrate and mutate whatever this points at. A real database in the
+	// environment must never be reachable from `bun test` (see test-setup.ts).
+	if (
+		authEnv.NODE_ENV === "test" &&
+		!authEnv.AUTH_DATABASE_URL.startsWith("file:")
+	) {
+		throw new Error(
+			"Refusing to open a non-file: auth database under NODE_ENV=test.",
+		);
+	}
+
 	const client = createClient({
 		url: authEnv.AUTH_DATABASE_URL,
 		authToken: authEnv.AUTH_TURSO_TOKEN,

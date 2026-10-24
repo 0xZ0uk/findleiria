@@ -83,10 +83,7 @@ export function decodeEntities(s: string): string {
 		.replace(/&#(\d+);/g, (m, dec: string) =>
 			codepointOrRaw(m, Number.parseInt(dec, 10)),
 		)
-		.replace(
-			/&([a-zA-Z]+);/g,
-			(m, name: string) => NAMED_ENTITIES[name] ?? m,
-		);
+		.replace(/&([a-zA-Z]+);/g, (m, name: string) => NAMED_ENTITIES[name] ?? m);
 }
 
 /**

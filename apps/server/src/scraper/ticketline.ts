@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 import { DateTime } from "luxon";
 import { isLeiriaDistrict } from "./district";
-import { toEpochInLisbon } from "./fingerprint";
+import { toEpochInLisbonOrNull } from "./fingerprint";
 import { defaultFetchText } from "./http";
 import type { RawEvent } from "./types";
 
@@ -150,7 +150,7 @@ export function toEpoch(date: string, time: string | null): number | null {
 		return null;
 	}
 	const tm = time?.match(/^(\d{2}):(\d{2})$/);
-	return toEpochInLisbon(
+	return toEpochInLisbonOrNull(
 		Number.parseInt(m[1] ?? "1", 10),
 		Number.parseInt(m[2] ?? "1", 10),
 		Number.parseInt(m[3] ?? "1", 10),
@@ -267,6 +267,13 @@ export async function scrape(
 			}
 			const raw = toRawEvent(row, detail);
 			if (raw) {
+				// Ticketline always yields a machine date; none means the date
+				// is impossible ("30/02") — skip just this row, count it.
+				if (raw.startAt == null) {
+					failures++;
+					firstError ??= `${row.url}: unparseable date "${detail?.date || row.date}"`;
+					continue;
+				}
 				events.push(raw);
 			}
 		}
@@ -320,7 +327,7 @@ export function toRawEvent(
 			detail?.venue?.trim() ||
 			row.venue.split(",")[0]?.trim() ||
 			"Local a definir",
-		city: "Leiria",
+		city,
 		// No platform-name fallback; canonicalization happens at ingest.
 		categories: row.categories,
 		imageUrl: null,

@@ -12,11 +12,17 @@ build
 apps/web/src/routeTree.gen.ts
 local.db
 local.db-*
+# Dev copy of the static snapshot (`pnpm --filter web snapshot`); the build
+# writes its own into dist/data.
+apps/web/public/data/
 apps/server/src/scraper/state/
 
-# Environment variables
+# Environment variables. The varlock schema (.env.schema) and the types it
+# generates (env.d.ts, apps/web/src/env.d.ts) are committed; values are not.
 .env
 .env*.local
+!.env.schema
+.varlock-frozen-env
 local-auth.db*
 
 # IDEs and editors

@@ -1,5 +1,5 @@
 import { isLeiriaDistrict } from "./district";
-import { toEpochInLisbon } from "./fingerprint";
+import { toEpochInLisbonOrNull } from "./fingerprint";
 import { defaultFetchText } from "./http";
 import type { RawEvent } from "./types";
 
@@ -132,7 +132,7 @@ function parseIsoDate(
 		return null;
 	}
 	const tm = time?.match(/^(\d{1,2}):(\d{2})/) ?? null;
-	return toEpochInLisbon(
+	return toEpochInLisbonOrNull(
 		Number.parseInt(m[1] ?? "0", 10),
 		Number.parseInt(m[2] ?? "0", 10),
 		Number.parseInt(m[3] ?? "0", 10),
@@ -147,6 +147,14 @@ function eventName(e: EbEvent): string {
 		return n;
 	}
 	return n?.text ?? "";
+}
+
+/** True when a date field is present but names a day that cannot exist. */
+function hasImpossibleDate(e: EbEvent): boolean {
+	return (
+		(!!e.start_date && parseIsoDate(e.start_date, e.start_time) == null) ||
+		(!!e.end_date && parseIsoDate(e.end_date, e.end_time) == null)
+	);
 }
 
 /** Map one Eventbrite payload event to a RawEvent (null when unusable). */
@@ -164,6 +172,9 @@ export function toRawEvent(e: EbEvent): RawEvent | null {
 		return null;
 	}
 	const endAt = parseIsoDate(e.end_date, e.end_time);
+	if (e.end_date && endAt == null) {
+		return null; // end names a day that cannot exist → skip the item
+	}
 	const venueName = e.primary_venue?.name?.trim() || "Local a definir";
 	const city = e.primary_venue?.address?.city?.trim() || null;
 	return {
@@ -214,6 +225,12 @@ export async function scrape(
 			for (const e of events) {
 				const raw = toRawEvent(e);
 				if (!raw) {
+					// An impossible date skips this item only — the remaining
+					// events and pages still parse.
+					if (hasImpossibleDate(e)) {
+						failures++;
+						firstError ??= `${e.eid ?? e.id}: impossible date`;
+					}
 					continue;
 				}
 				// District scope: venue city must be one of the 14 district

@@ -11,12 +11,23 @@ import { EventNotFound } from "@/components/event/not-found";
 import { AppChrome } from "@/components/nav/chrome";
 import { SavedPage } from "@/components/saved/saved-page";
 import { useAgenda } from "@/hooks/use-agenda";
+import {
+	DEFAULT_TITLE,
+	SHELL_DESCRIPTION,
+	useDocumentMeta,
+} from "@/hooks/use-document-meta";
 import { queryClient } from "@/utils/api";
-import { pathnameToRoute } from "@/utils/route";
+import {
+	isSameLocation,
+	LOCATION_CHANGE_EVENT,
+	pathnameToRoute,
+} from "@/utils/route";
 
 /** Sits inside the provider: `useAgenda` needs the query client above it. */
 function AgendaShell() {
 	const agenda = useAgenda();
+	// Coming back from an event would otherwise keep that event's title.
+	useDocumentMeta(DEFAULT_TITLE, SHELL_DESCRIPTION);
 
 	return (
 		<div className="min-h-svh">
@@ -62,14 +73,19 @@ function usePathname(): string {
 				return;
 
 			event.preventDefault();
+			const { pathname, search } = window.location;
+			if (isSameLocation(href, pathname, search)) {
+				window.scrollTo(0, 0);
+				return;
+			}
 			// Where we came from, so an event page can offer the way back to the
 			// same filtered agenda instead of a bare home link.
-			window.history.pushState(
-				{ from: window.location.pathname + window.location.search },
-				"",
-				href,
-			);
+			window.history.pushState({ from: pathname + search }, "", href);
 			sync();
+			// `pushState` fires no event, so tell whoever keeps state derived from
+			// the URL (the agenda's filters) that it moved. Same pathname means no
+			// remount, so without this they would keep showing the old query.
+			window.dispatchEvent(new Event(LOCATION_CHANGE_EVENT));
 			window.scrollTo(0, 0);
 		};
 

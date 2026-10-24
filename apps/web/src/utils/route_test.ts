@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { eventHref, pathnameToRoute, savedHref } from "./route";
+import { eventHref, isSameLocation, pathnameToRoute, savedHref } from "./route";
 
 describe("pathnameToRoute", () => {
 	test("root is the agenda", () => {
@@ -68,5 +68,22 @@ describe("eventHref", () => {
 describe("savedHref", () => {
 	test("points at the saved events page", () => {
 		expect(savedHref()).toBe("/guardados");
+	});
+});
+
+describe("isSameLocation", () => {
+	test("the page already showing is the same location", () => {
+		expect(isSameLocation("/", "/", "")).toBe(true);
+		expect(isSameLocation("/?concelho=Leiria", "/", "?concelho=Leiria")).toBe(
+			true,
+		);
+	});
+
+	test("the bare agenda link from a filtered agenda is a move", () => {
+		expect(isSameLocation("/", "/", "?concelho=%C3%93bidos")).toBe(false);
+	});
+
+	test("a different path is a move", () => {
+		expect(isSameLocation("/guardados", "/", "")).toBe(false);
 	});
 });

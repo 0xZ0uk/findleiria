@@ -181,6 +181,28 @@ describe("scrape resilience (mock deps, offline)", () => {
 	});
 });
 
+describe("impossible dates (S2)", () => {
+	const item = (slug: string, when: string) => `<item>
+      <title>Evento ${slug}</title>
+      <description>&lt;p&gt;${when}&lt;/p&gt;&lt;p&gt;📌Teatro Miguel Franco&lt;/p&gt;</description>
+      <pubDate>Mon, 05 Oct 2026 10:00:00 +0000</pubDate>
+      <link>https://www.cm-leiria.pt/evento/${slug}</link>
+    </item>`;
+	const feed = `<rss><channel>${item("bom-1", "12 de novembro de 2026 às 21h30")}${item("mau", "31 de fevereiro de 2027 às 21h30")}${item("bom-2", "14 de novembro de 2026 às 18h00")}</channel></rss>`;
+
+	test("parseEvent never throws on 31 de fevereiro; returns null", () => {
+		expect(() => parseFeed(feed)).not.toThrow();
+		expect(parseFeed(feed).map((e) => e.slug)).toEqual(["bom-1", "bom-2"]);
+	});
+
+	test("scrape skips only the bad item and counts it as a failure", async () => {
+		const result = await scrape({ fetchText: async () => feed });
+		expect(result.events.map((e) => e.slug)).toEqual(["bom-1", "bom-2"]);
+		expect(result.failures).toBe(1);
+		expect(result.firstError).not.toBeNull();
+	});
+});
+
 describe("fingerprintUndated", () => {
 	test("same title + venue => identical fingerprint", () => {
 		const a = fingerprintUndated(

@@ -32,12 +32,22 @@ export function AgendaSkeleton() {
 	);
 }
 
-export function AgendaError({ message, onRetry }: { message: string; onRetry: () => void }) {
+export function AgendaError({
+	message,
+	onRetry,
+}: {
+	message: string;
+	onRetry: () => void;
+}) {
 	return (
 		<div role="alert" className="mt-4 max-w-[46ch]">
 			<p className="p443-card-title">Não foi possível carregar a agenda.</p>
-			<p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">A leitura dos dados falhou. Tenta de novo.</p>
-			<p className="mt-3 line-clamp-3 break-words font-mono text-[12px] text-muted-foreground/70">{message}</p>
+			<p className="mt-2 text-[15px] text-muted-foreground leading-relaxed">
+				A leitura dos dados falhou. Tenta de novo.
+			</p>
+			<p className="mt-3 line-clamp-3 break-words font-mono text-[12px] text-muted-foreground/70">
+				{message}
+			</p>
 			<button type="button" onClick={onRetry} className={`${BUTTON} mt-5`}>
 				<RefreshCw aria-hidden="true" strokeWidth={1.5} className="size-4" />
 				Tentar de novo
@@ -65,11 +75,21 @@ export function AgendaEmpty({ agenda }: { agenda: Agenda }) {
 
 	return (
 		<div className="mt-8 max-w-[46ch]">
-			<SearchX aria-hidden="true" strokeWidth={1.5} className="size-5 text-muted-foreground" />
+			<SearchX
+				aria-hidden="true"
+				strokeWidth={1.5}
+				className="size-5 text-muted-foreground"
+			/>
 			<p className="p443-card-title mt-4">{headline}</p>
-			<p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">{hint}</p>
+			<p className="mt-2 text-[15px] text-muted-foreground leading-relaxed">
+				{hint}
+			</p>
 			{agenda.isFiltered ? (
-				<button type="button" onClick={agenda.clearFilters} className={`${BUTTON} mt-5`}>
+				<button
+					type="button"
+					onClick={agenda.clearFilters}
+					className={`${BUTTON} mt-5`}
+				>
 					Limpar filtros
 				</button>
 			) : null}
@@ -82,16 +102,30 @@ export function AgendaEmpty({ agenda }: { agenda: Agenda }) {
  * With headroom restored this fires only when the window genuinely outgrows
  * the cap, which is the signal to page instead of raise it again.
  */
-export function TruncationNote({ count, days }: { count: number; days: number }) {
+export function TruncationNote({
+	count,
+	days,
+}: {
+	count: number;
+	days: number;
+}) {
 	return (
-		<p className="mb-4 text-sm text-muted-foreground">
+		<p className="mb-4 text-muted-foreground text-sm">
 			Estão listados os primeiros {count} eventos dos próximos {days} dias.{" "}
 			<span className="text-foreground">Há mais além destes.</span>
 		</p>
 	);
 }
 
-export function EventCount({ total, shown, days }: { total: number; shown: number; days: number }) {
+export function EventCount({
+	total,
+	shown,
+	days,
+}: {
+	total: number;
+	shown: number;
+	days: number;
+}) {
 	if (shown !== total) {
 		return (
 			<>

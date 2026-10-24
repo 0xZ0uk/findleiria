@@ -1,6 +1,6 @@
+import { isLeiriaDistrict, normalizePlace } from "./district";
 import { toEpochInLisbon } from "./fingerprint";
 import { defaultFetchText } from "./http";
-import { isLeiriaDistrict, normalizePlace } from "./district";
 import { decodeEntities } from "./normalize";
 import { loadState, saveState } from "./state";
 import type { RawEvent } from "./types";
@@ -103,10 +103,10 @@ export function parseEventSitemap(html: string): SitemapEntry[] {
 	const urlBlocks = html.match(/<url>[\s\S]*?<\/url>/g) ?? [];
 	for (const block of urlBlocks) {
 		const locCap =
-			block.match(/<loc><!\[CDATA\[([^]*?)\]\]><\/loc>/i) ||
+			block.match(/<loc><!\[CDATA\[([\s\S]*?)\]\]><\/loc>/i) ||
 			block.match(/<loc>\s*([^<]*?)\s*<\/loc>/i);
 		const lastCap =
-			block.match(/<lastmod><!\[CDATA\[([^]*?)\]\]><\/lastmod>/i) ||
+			block.match(/<lastmod><!\[CDATA\[([\s\S]*?)\]\]><\/lastmod>/i) ||
 			block.match(/<lastmod>\s*([^<]*?)\s*<\/lastmod>/i);
 		const loc = locCap?.[1];
 		if (loc) {
@@ -139,9 +139,7 @@ export interface ParsedDetail {
  * (description) and `og:image` (poster).
  */
 export function parseDetail(html: string): ParsedDetail {
-	const titleMatch = html.match(
-		/<h2 class="banner-title">([\s\S]*?)<\/h2>/i,
-	);
+	const titleMatch = html.match(/<h2 class="banner-title">([\s\S]*?)<\/h2>/i);
 	let title: string | null = null;
 	if (titleMatch) {
 		title = decodeEntities(stripTags(titleMatch[1] ?? "")).trim() || null;
@@ -330,9 +328,10 @@ export function isOutOfDistrictConcelho(place: string): boolean {
 }
 
 /** Resolve venueName + city from the detail's venue string. Unknown → "Óbidos". */
-export function resolveVenue(
-	venue: string | null,
-): { venueName: string; city: string } {
+export function resolveVenue(venue: string | null): {
+	venueName: string;
+	city: string;
+} {
 	const raw = venue?.trim() || "";
 	if (!raw || UNKNOWN_VENUE.test(raw)) {
 		return { venueName: "Óbidos", city: "Óbidos" };
@@ -344,7 +343,10 @@ export function resolveVenue(
 	// then drops it instead of us claiming Lisbon for Óbidos. Any other tail is
 	// an Óbidos freguesia we cannot map, so the concelho Óbidos stands.
 	let city = "Óbidos";
-	const parts = raw.split(",").map((p) => p.trim()).filter(Boolean);
+	const parts = raw
+		.split(",")
+		.map((p) => p.trim())
+		.filter(Boolean);
 	const last = parts[parts.length - 1] ?? "";
 	if (last && (isLeiriaDistrict(last) || isOutOfDistrictConcelho(last))) {
 		city = last;
@@ -398,13 +400,7 @@ export function toRawEvent(
 				0,
 				0,
 			);
-			endAt = toEpochInLisbon(
-				date.endYear,
-				date.endMonth,
-				date.endDay,
-				23,
-				59,
-			);
+			endAt = toEpochInLisbon(date.endYear, date.endMonth, date.endDay, 23, 59);
 			machineDate = true;
 		} catch {
 			// invalid calendar day — fall through to undated placeholder

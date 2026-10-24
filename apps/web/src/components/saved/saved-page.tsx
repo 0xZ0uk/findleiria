@@ -1,15 +1,16 @@
-import type { SavedListEvent } from "@/utils/api";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { EventRow } from "@/components/agenda/event-row";
 import { PageFooter } from "@/components/agenda/footer";
 import { MICRO, SHELL } from "@/components/agenda/layout";
 import { AgendaError } from "@/components/agenda/states";
 import { SaveButton } from "@/components/saved/save-button";
+import { SHELL_DESCRIPTION, useDocumentMeta } from "@/hooks/use-document-meta";
 import { useSaved } from "@/hooks/use-saved";
+import type { SavedListEvent } from "@/utils/api";
 import { api } from "@/utils/api";
 import { clock, dayMonth, hasClock, plural, weekday } from "@/utils/format";
 import { savedHref, signInHref } from "@/utils/route";
-import { EventRow } from "@/components/agenda/event-row";
 
 /** Three placeholder lines, so the list does not jump when the read lands. */
 function SavedSkeleton() {
@@ -136,8 +137,8 @@ function NothingSaved() {
 		<div className="mt-8 rounded-[4px] border border-border bg-card p-6">
 			<p className="text-[15px] leading-relaxed">
 				Ainda não guardou nada. Na agenda, toque em{" "}
-				<span className="font-medium">Guardar</span> no evento que lhe
-				interessa — fica aqui à espera.
+				<span className="font-medium">Guardar</span> no evento que lhe interessa
+				— fica aqui à espera.
 			</p>
 			<a
 				href="/"
@@ -154,23 +155,26 @@ function NothingSaved() {
  *
  * Two reads, and only one of them is ours: the slug list comes from
  * `/api/saved` (same-origin, cookie-authenticated, the only place the auth DB
- * token exists), and the events themselves come from the same Turso mirror the
- * agenda reads. Nothing about events is duplicated into the auth DB.
+ * token exists), and the events themselves come from the static snapshot's
+ * per-event files. Nothing about events is duplicated into the auth DB.
  *
- * Split into what is still coming and what has already happened, because a
- * saved event does not stop being interesting the day after — and the mirror
- * keeps past events, so the row is still there to read. Slugs that no longer
- * resolve get their own honest section instead of vanishing.
+ * Split into what is still coming and what has already happened, against this
+ * reader's clock, because a saved event does not stop being interesting the
+ * day after, and the snapshot keeps a file for every past event. Slugs that
+ * no longer resolve get their own honest section instead of vanishing.
  */
 export function SavedPage() {
 	const saved = useSaved();
+	useDocumentMeta("Guardados — FindLeiria", SHELL_DESCRIPTION);
 	const now = Math.floor(Date.now() / 1000);
 
 	// Stable array so the query key does not change on every render.
 	const slugList = useMemo(() => [...saved.slugs], [saved.slugs]);
 	const events = useQuery(api.saved.queryOptions(slugList));
 
-	const rows = events.data ?? [];
+	// `keepPreviousData` leaves the last fetch on screen while the next slug
+	// list loads, so an event just unsaved is dropped here rather than waiting.
+	const rows = (events.data ?? []).filter((row) => saved.slugs.has(row.slug));
 	const upcoming = rows
 		.filter((row) => (row.endAt ?? row.startAt) >= now)
 		.sort((a, b) => a.startAt - b.startAt);

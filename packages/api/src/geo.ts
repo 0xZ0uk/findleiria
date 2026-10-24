@@ -116,6 +116,11 @@ export function boundsOfAll(
 				Math.max(box[3], north),
 			];
 		},
-		[Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY],
+		[
+			Number.POSITIVE_INFINITY,
+			Number.POSITIVE_INFINITY,
+			Number.NEGATIVE_INFINITY,
+			Number.NEGATIVE_INFINITY,
+		],
 	);
 }

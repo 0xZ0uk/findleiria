@@ -2,8 +2,8 @@ import {
 	Bookmark,
 	CalendarDays,
 	LogOut,
-	User,
 	type LucideIcon,
+	User,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { signOut, useSession } from "@/utils/auth-client";
@@ -14,21 +14,21 @@ function currentPath(): string {
 	return typeof window === "undefined" ? "/" : window.location.pathname;
 }
 
-const MICRO_NAV = "font-mono text-[11px] font-medium uppercase tracking-[0.14em]";
+const MICRO_NAV =
+	"font-mono text-[11px] font-medium uppercase tracking-[0.14em]";
 
 type TabSpec = { href: string; label: string; icon: LucideIcon };
 
 /** One desktop inline link in the masthead row. */
 function DeskNavLink({ href, label }: { href: string; label: string }) {
-	const active = currentPath() === href || (href !== "/" && currentPath().startsWith(href));
+	const active =
+		currentPath() === href || (href !== "/" && currentPath().startsWith(href));
 	return (
 		<a
 			href={href}
 			aria-current={active ? "page" : undefined}
-			className={`focus-ring inline-flex h-10 items-center rounded-[4px] px-3 text-[14px] font-medium motion-safe:transition-colors ${
-				active
-					? "text-primary"
-					: "text-muted-foreground hover:text-foreground"
+			className={`focus-ring inline-flex h-10 items-center rounded-[4px] px-3 font-medium text-[14px] motion-safe:transition-colors ${
+				active ? "text-primary" : "text-muted-foreground hover:text-foreground"
 			}`}
 		>
 			{label}
@@ -55,7 +55,12 @@ export function TopNav() {
 }
 
 /** One mobile tab in the bottom bar. Active tab reads in amber, targets ≥44px. */
-function Tab({ href, label, icon: Icon, active }: TabSpec & { active: boolean }) {
+function Tab({
+	href,
+	label,
+	icon: Icon,
+	active,
+}: TabSpec & { active: boolean }) {
 	return (
 		<a
 			href={href}
@@ -65,7 +70,9 @@ function Tab({ href, label, icon: Icon, active }: TabSpec & { active: boolean })
 			}`}
 		>
 			<Icon aria-hidden="true" strokeWidth={1.5} className="size-5" />
-			<span className={`${MICRO_NAV} ${active ? "text-primary" : "text-muted-foreground"}`}>
+			<span
+				className={`${MICRO_NAV} ${active ? "text-primary" : "text-muted-foreground"}`}
+			>
 				{label}
 			</span>
 		</a>
@@ -112,7 +119,9 @@ function ContaTab({ active }: { active: boolean }) {
 				}`}
 			>
 				<User aria-hidden="true" strokeWidth={1.5} className="size-5" />
-				<span className={`${MICRO_NAV} ${active ? "text-primary" : "text-muted-foreground"}`}>
+				<span
+					className={`${MICRO_NAV} ${active ? "text-primary" : "text-muted-foreground"}`}
+				>
 					Conta
 				</span>
 			</a>
@@ -130,7 +139,7 @@ function ContaTab({ active }: { active: boolean }) {
 				aria-expanded={open}
 				aria-haspopup="menu"
 				aria-label="A sua conta"
-				className={`inline-flex w-full min-h-[56px] flex-col items-center justify-center gap-1 rounded-[4px] focus-ring motion-safe:transition-colors ${called}`}
+				className={`focus-ring inline-flex min-h-[56px] w-full flex-col items-center justify-center gap-1 rounded-[4px] motion-safe:transition-colors ${called}`}
 			>
 				<User
 					aria-hidden="true"
@@ -146,7 +155,9 @@ function ContaTab({ active }: { active: boolean }) {
 					role="menu"
 					className="absolute bottom-full left-1/2 z-30 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-[4px] border border-border bg-card p-4 shadow-lg sm:hidden"
 				>
-					<p className={`${MICRO_NAV} text-muted-foreground`}>Sessão iniciada</p>
+					<p className={`${MICRO_NAV} text-muted-foreground`}>
+						Sessão iniciada
+					</p>
 					<p className="mt-2 truncate text-[14px]">{user.email}</p>
 					<button
 						type="button"
@@ -182,7 +193,7 @@ export function BottomNav() {
 	return (
 		<nav
 			aria-label="Principal"
-			className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm sm:hidden"
+			className="fixed inset-x-0 bottom-0 z-40 border-border border-t bg-background/95 backdrop-blur-sm sm:hidden"
 		>
 			<div
 				className="relative mx-auto grid w-full max-w-md grid-cols-3"

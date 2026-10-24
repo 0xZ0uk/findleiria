@@ -4,11 +4,11 @@
 	"tasks": {
 		"build": {
 			"dependsOn": ["^build"],
-			"inputs": ["$TURBO_DEFAULT$", ".env*"],
+			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/.env*"],
 			"outputs": ["dist/**"]
 		},
-		"lint": {
-			"dependsOn": ["^lint"]
+		"test": {
+			"cache": false
 		},
 		"check-types": {
 			"dependsOn": ["^check-types"]

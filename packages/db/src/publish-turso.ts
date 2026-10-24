@@ -9,6 +9,12 @@
  * single write transaction, so a half-published DB is impossible; counts are
  * printed on both sides.
  *
+ * The site does not read Turso at runtime: its build turns Turso into a static
+ * JSON snapshot. So a publish only reaches readers once Vercel rebuilds, and
+ * when `VERCEL_DEPLOY_HOOK_URL` is set this run asks for that rebuild after
+ * the mirror has committed. A failed hook exits non-zero (the data is safe in
+ * Turso; the site is just still serving the previous build).
+ *
  *   bun run db:publish                    # from packages/db, uses the repo .env
  *   DATABASE_URL=… TURSO_DATABASE_URL=… TURSO_AUTH_TOKEN=… bun run db:publish
  */
@@ -66,7 +72,9 @@ for (const table of TABLES) {
 		process.exit(1);
 	}
 
-	const rows = local.query<Record<string, unknown>, []>(`SELECT * FROM ${table}`).all();
+	const rows = local
+		.query<Record<string, unknown>, []>(`SELECT * FROM ${table}`)
+		.all();
 	counts.set(table, rows.length);
 	const placeholders = columns.map(() => "?").join(", ");
 	for (const row of rows) {
@@ -97,4 +105,68 @@ const check = await turso.execute(
 const row = check.rows[0];
 console.log(`Turso now: ${JSON.stringify(row)}`);
 local.close();
+turso.close();
+
+/**
+ * Ask Vercel to rebuild, which is what turns the new rows into pages: the
+ * agenda snapshot, `/evento/<slug>` pages, OG cards and the sitemap are all
+ * written at build time. Runs only after the batch above has committed, so a
+ * hook failure can never leave a half-published database.
+ */
+async function triggerRedeploy(hookUrl: string): Promise<boolean> {
+	// The hook URL is a credential (anyone holding it can trigger builds), so
+	// the log names only the host.
+	let host: string;
+	try {
+		host = new URL(hookUrl).host;
+	} catch {
+		console.error(
+			"!!! VERCEL_DEPLOY_HOOK_URL is not a valid URL; no redeploy was triggered.",
+		);
+		return false;
+	}
+	try {
+		const response = await fetch(hookUrl, {
+			method: "POST",
+			signal: AbortSignal.timeout(15_000),
+		});
+		const body = await response.text();
+		if (!response.ok) {
+			console.error(
+				`!!! Redeploy hook FAILED: ${host} answered ${response.status} ${response.statusText} ${body.slice(0, 200)}`,
+			);
+			return false;
+		}
+		let job = "";
+		try {
+			const parsed = JSON.parse(body) as {
+				job?: { id?: string; state?: string };
+			};
+			if (parsed.job?.id) {
+				job = ` (job ${parsed.job.id}, ${parsed.job.state ?? "queued"})`;
+			}
+		} catch {
+			// Vercel answers JSON; any other 2xx body still means it was accepted.
+		}
+		console.log(`redeploy requested from ${host}${job}`);
+		return true;
+	} catch (err) {
+		console.error(`!!! Redeploy hook FAILED: could not reach ${host}:`, err);
+		return false;
+	}
+}
+
+const hookUrl = process.env.VERCEL_DEPLOY_HOOK_URL;
+if (!hookUrl) {
+	console.log(
+		"VERCEL_DEPLOY_HOOK_URL not set: Turso is updated, but the site keeps serving its last build until it is redeployed.",
+	);
+	process.exit(0);
+}
+if (!(await triggerRedeploy(hookUrl))) {
+	console.error(
+		"!!! Turso IS published, but the site was NOT redeployed: new events have no pages until the next deploy.",
+	);
+	process.exit(1);
+}
 process.exit(0);

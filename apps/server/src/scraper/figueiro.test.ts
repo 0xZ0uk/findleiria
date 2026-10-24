@@ -3,14 +3,15 @@ import { describe, expect, test } from "bun:test";
 import { isLeiriaDistrict } from "./district";
 import {
 	AGENDA_PATH,
+	type DateParts,
 	DEFAULT_VENUE,
-	SITE,
+	type DjevItem,
 	dateFromHref,
 	parseDjevDate,
 	parseItems,
+	SITE,
 	scrape,
 	toRawEvent,
-	type DjevItem,
 } from "./figueiro";
 import { toEpochInLisbon } from "./fingerprint";
 
@@ -156,7 +157,12 @@ describe("parseItems", () => {
 		expect(first.imageUrl).toBe(
 			`${SITE}/media/djevents/images/224-figueiro-colorido/200x200-towidth-80-banner.jpg`,
 		);
-		expect(first.from).toMatchObject({ month: 9, day: 19, hour: 18, minute: 30 });
+		expect(first.from).toMatchObject({
+			month: 9,
+			day: 19,
+			hour: 18,
+			minute: 30,
+		});
 		expect(first.to).toBeNull();
 	});
 
@@ -225,6 +231,17 @@ describe("toRawEvent", () => {
 		expect(reason).toBe("past");
 	});
 
+	test("an impossible calendar date reports invalidDate instead of throwing", () => {
+		const bad = {
+			...(parseDjevDate("Sábado, 19 setembro 2026 at 18:30") as DateParts),
+			day: 31,
+		};
+		const start = toRawEvent(item({ from: bad }), isLeiriaDistrict, NOW);
+		expect(start).toEqual({ raw: null, reason: "invalidDate" });
+		const end = toRawEvent(item({ to: bad }), isLeiriaDistrict, NOW);
+		expect(end).toEqual({ raw: null, reason: "invalidDate" });
+	});
+
 	test("drops a row that is neither dated nor link-dated", () => {
 		const { raw, reason } = toRawEvent(
 			item({ from: null, href: PLAIN_HREF }),
@@ -290,6 +307,25 @@ describe("scrape", () => {
 		expect(result.droppedPast).toBe(0);
 		expect(result.droppedOutOfDistrict).toBe(0);
 		expect(result.failures).toBe(0);
+	});
+
+	test("an impossible date skips only that item and counts a failure", async () => {
+		const result = await scrape(
+			{
+				fetchText: async () =>
+					LISTING.replace(
+						"Sábado, 19 setembro 2026 at 18:30",
+						"Sábado, 31 setembro 2026 at 18:30",
+					),
+				sleep: async () => {},
+				now: NOW,
+			},
+			isLeiriaDistrict,
+		);
+		expect(result.events.length).toBe(1);
+		expect(result.events[0]?.slug).toContain("concurso");
+		expect(result.failures).toBe(1);
+		expect(result.firstError).toContain("impossible date");
 	});
 
 	test("a failed fetch is reported, never fatal", async () => {

@@ -1,4 +1,7 @@
-import { DISTRICT_MUNICIPALITIES, municipalityOf } from "@events-tracker/api/places";
+import {
+	DISTRICT_MUNICIPALITIES,
+	municipalityOf,
+} from "@events-tracker/api/places";
 
 /**
  * Where a row's city sits on the map (SLICE_14).
@@ -37,7 +40,9 @@ export type ConcelhoTally = {
  * and the result is a plain array: the map wants a stable order to label, and
  * the ranking next to it wants the same list.
  */
-export function tallyConcelhos(rows: { venueCity: string | null }[]): ConcelhoTally[] {
+export function tallyConcelhos(
+	rows: { venueCity: string | null }[],
+): ConcelhoTally[] {
 	const counts = new Map<string, number>();
 	let unplaced = 0;
 	for (const row of rows) {
@@ -53,7 +58,9 @@ export function tallyConcelhos(rows: { venueCity: string | null }[]): ConcelhoTa
 		count,
 		mappable: isDistrictConcelho(name),
 	}));
-	tallies.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "pt"));
+	tallies.sort(
+		(a, b) => b.count - a.count || a.name.localeCompare(b.name, "pt"),
+	);
 	if (unplaced > 0) {
 		tallies.push({ name: "Sem concelho", count: unplaced, mappable: false });
 	}
@@ -79,7 +86,10 @@ export function districtRoster(tallies: ConcelhoTally[]): ConcelhoTally[] {
 
 /** The count the ramp is scaled to. Never zero, so an empty window stays sane. */
 export function peak(tallies: ConcelhoTally[]): number {
-	return tallies.reduce((max, tally) => (tally.count > max ? tally.count : max), 0);
+	return tallies.reduce(
+		(max, tally) => (tally.count > max ? tally.count : max),
+		0,
+	);
 }
 
 /**

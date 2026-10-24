@@ -25,20 +25,35 @@ import {
 	normalizeCity,
 	normalizeTitle,
 	slugify,
-	venueTokens,
 	venuesMatch,
+	venueTokens,
 } from "./normalize";
+import { cityKey } from "./venue-city";
 
-/** Which source to trust for TIME, most-trusted first. Municipal agenda
- * (leiriagenda) is authoritative; Viral Agenda is last — its JSON-LD is
- * DST-shifted. A row's trust is the BEST source attributing it. */
+/** Which source to trust for TIME, most-trusted first. Manual (paste-a-link)
+ * ingest is a human-vetted row; municipal/first-party agendas come next, then
+ * ticketing platforms with machine-readable times, then aggregators. Viral
+ * Agenda is last among known sources — its JSON-LD is DST-shifted. A row's
+ * trust is the BEST source attributing it. Every key of the `sources`
+ * registry (index.ts) must be listed here (guarded by a test); a source
+ * missing from this list ranks below viralagenda. */
 export const TIME_SOURCE_PRIORITY = [
+	"manual",
 	"leiriagenda",
+	"municipal",
+	"obidos",
+	"caldas",
+	"figueiro",
+	"regiaoleiria",
+	"cmleiriarss",
 	"eventbrite",
 	"ticketline",
 	"shotgun",
 	"bol",
-	"cmleiriarss",
+	"cisterfestas",
+	"festasearraiais",
+	"turismodocentro",
+	"nocartaz",
 	"viralagenda",
 ] as const;
 
@@ -267,7 +282,8 @@ export interface ComponentRow {
 /**
  * Venue compatibility for EVENT identity (the wildcard). Vague/placeholder
  * venues are city-level announcements: two vague venues match regardless of
- * the venue name, and a vague venue matches a specific venue when both rows
+ * the venue name (within one town, or when a town is unknown — C3), and a
+ * vague venue matches a specific venue when both rows
  * are in the same city. Two specific venues only match under the STRICT
  * `venuesMatch`. This is intentionally LOSER than `venuesMatch` — it lets
  * duplicate EVENT rows fuse — but it must NEVER be used to merge venue ROWS
@@ -296,7 +312,14 @@ export function venueCompatible(
 	if (aVenue == null || bVenue == null) return aVenue === bVenue;
 	const aVague = isVagueVenue(aVenue, aCity);
 	const bVague = isVagueVenue(bVenue, bCity);
-	if (aVague && bVague) return true;
+	// Two placeholders match whatever their names — but not across towns: a
+	// generic "Vários Espaços Culturais" in Batalha and in Pombal are two
+	// announcements (C3). An unknown town matches either.
+	if (aVague && bVague) {
+		const aTown = cityKey(aCity);
+		const bTown = cityKey(bCity);
+		return aTown === "" || bTown === "" || aTown === bTown;
+	}
 	if (aVague || bVague) {
 		if (normalizeCity(aCity ?? "") === normalizeCity(bCity ?? "")) return true;
 		const specificCity = aVague ? bCity : aCity;
@@ -474,12 +497,7 @@ export function sameOccurrenceVariant(
 			aFacts.venue.every((t) => bFacts.place.has(t))) ||
 		(bFacts.venue.length > 0 && bFacts.venue.every((t) => aFacts.place.has(t)));
 	const venueLevel =
-		venuesMatch(
-			a.venue ?? "",
-			b.venue ?? "",
-			a.city,
-			b.city,
-		) ||
+		venuesMatch(a.venue ?? "", b.venue ?? "", a.city, b.city) ||
 		namedInOther ||
 		aFacts.venue.some((t) => bFacts.venue.includes(t));
 	if (

@@ -15,29 +15,34 @@
 	},
 	"scripts": {
 		"build": "tsc -p tsconfig.build.json",
-		"auth:generate": "auth generate --config ./src/auth.ts --output ./src/schema.ts --yes",
-		"db:push": "drizzle-kit push",
-		"db:generate": "drizzle-kit generate",
-		"db:migrate": "drizzle-kit migrate",
-		"db:studio": "drizzle-kit studio",
+		"env:check:production": "NODE_ENV=production varlock load",
+		"auth:generate": "varlock run -- auth generate --config ./src/auth.ts --output ./src/schema.ts --yes",
+		"db:push": "varlock run -- drizzle-kit push",
+		"db:generate": "varlock run -- drizzle-kit generate",
+		"db:migrate": "varlock run -- drizzle-kit migrate",
+		"db:studio": "varlock run -- drizzle-kit studio",
 		"test": "bun test",
 		"check-types": "tsc --noEmit"
+	},
+	"varlock": {
+		"loadPath": "../../",
+		"filter": "#auth"
 	},
 	"dependencies": {
 		"@better-auth/drizzle-adapter": "1.7.4",
 		"@libsql/client": "0.17.4",
-		"@t3-oss/env-core": "^0.13.11",
 		"better-auth": "1.7.4",
-		"dotenv": "catalog:",
 		"drizzle-orm": "^0.45.2",
 		"hono": "catalog:",
 		"libsql": "catalog:",
-		"zod": "catalog:"
+		"nodemailer": "^10.2.1"
 	},
 	"devDependencies": {
 		"@events-tracker/config": "workspace:*",
 		"@types/bun": "catalog:",
+		"@types/nodemailer": "^8.0.2",
 		"drizzle-kit": "^0.31.10",
-		"typescript": "catalog:"
+		"typescript": "catalog:",
+		"varlock": "^1.23.0"
 	}
 }

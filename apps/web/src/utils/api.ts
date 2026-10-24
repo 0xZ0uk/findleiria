@@ -1,31 +1,37 @@
 import {
-	eventBySlug,
-	eventStats,
-	eventsBySlugs,
-	listEvents,
-	listInput,
-	undatedEvents,
-	WINDOW_MAX,
-} from "@events-tracker/api/queries/events";
-import { createBrowserDb } from "@events-tracker/db/browser";
-import { env } from "@events-tracker/env/web";
-import { QueryClient, queryOptions } from "@tanstack/react-query";
+	type AgendaSnapshot,
+	agendaPath,
+	type EventDetail,
+	eventPath,
+} from "@events-tracker/api/snapshot-shape";
+import {
+	keepPreviousData,
+	QueryClient,
+	queryOptions,
+} from "@tanstack/react-query";
+
+import {
+	fetchSnapshotFile,
+	readEmbeddedEvent,
+	SnapshotError,
+} from "@/utils/snapshot";
+
+export type {
+	EventDetail,
+	EventStats,
+	PublicEvent,
+	UndatedEvent,
+} from "@events-tracker/api/snapshot-shape";
 
 /**
- * Read API for the static page (SLICE_8/9).
+ * Read API for the static page.
  *
- * There is no server in production: this opens a libSQL-over-HTTP client
- * straight to Turso in the browser and hands react-query plain `queryOptions`.
- * The query functions come from `@events-tracker/api/queries/events`, the same
- * module the tRPC router wraps, so the browser and the (dev-only) server run
- * identical SQL.
- *
- * Three reads, and the agenda window is the only one that carries rows.
+ * There is no event API in production and no database client in the bundle.
+ * The build writes a JSON snapshot next to the SPA (`/data/…`, see
+ * `@events-tracker/api/snapshot-shape`) and these read it from the CDN: one
+ * file for the whole agenda, one per event. The files change once a day, when
+ * the publish triggers a redeploy.
  */
-export const db = createBrowserDb(
-	env.VITE_TURSO_URL,
-	env.VITE_TURSO_AUTH_TOKEN,
-);
 
 export const queryClient = new QueryClient({
 	defaultOptions: {
@@ -39,77 +45,82 @@ export const queryClient = new QueryClient({
 	},
 });
 
-export type PublicEvent = Awaited<ReturnType<typeof listEvents>>[number];
-
 /**
- * One row of the reader's saved list. Narrower than `PublicEvent`: the agenda
- * merges a day's sessions into one row, while a saved slug is always a single
- * event, so there is no `sessionStarts` to fold in.
+ * One row of the reader's saved list. A saved slug is always a single event
+ * (the agenda merges a day's sessions into one row; this does not), read from
+ * its per-event file, so it is the full detail shape.
  */
-export type SavedListEvent = Awaited<ReturnType<typeof eventsBySlugs>>[number];
-export type UndatedEvent = Awaited<ReturnType<typeof undatedEvents>>[number];
-export type EventStats = Awaited<ReturnType<typeof eventStats>>;
-export type EventDetail = Awaited<ReturnType<typeof eventBySlug>>;
+export type SavedListEvent = EventDetail;
+
+async function fetchAgenda(): Promise<AgendaSnapshot> {
+	const agenda = await fetchSnapshotFile<AgendaSnapshot>(agendaPath());
+	if (!agenda) {
+		throw new SnapshotError("A agenda ainda não foi publicada.", 404);
+	}
+	return agenda;
+}
+
+/** `null` when the slug has no file: a real not-found, not an empty page. */
+function fetchEvent(slug: string): Promise<EventDetail | null> {
+	return fetchSnapshotFile<EventDetail>(eventPath(slug));
+}
+
+function eventQueryOptions(slug: string) {
+	return queryOptions({
+		queryKey: ["event", slug],
+		queryFn: () => fetchEvent(slug),
+		// A prerendered `/evento/<slug>` carries its own event, so a cold load
+		// paints the page with no skeleton and no request.
+		initialData: () => readEmbeddedEvent(slug),
+	});
+}
 
 export const api = {
-	/** Every event starting inside the window, oldest first. */
-	window: {
-		queryOptions: (from: number, to: number) =>
-			queryOptions({
-				queryKey: ["agenda", "window", from, to],
-				queryFn: () =>
-					listEvents(
-						db,
-						listInput.parse({
-							dateFrom: from,
-							dateTo: to,
-							includeUndated: false,
-							limit: WINDOW_MAX,
-						}),
-					),
-			}),
-	},
-	/** Announced but undated — shown separately, never mixed into the days. */
-	undated: {
+	/**
+	 * The whole agenda in one file: dated rows (a little wider than the window,
+	 * trimmed by `useAgenda` against the reader's clock), the undated
+	 * announcements and the masthead's stats.
+	 */
+	agenda: {
 		queryOptions: () =>
 			queryOptions({
-				queryKey: ["agenda", "undated"],
-				queryFn: () => undatedEvents(db),
-			}),
-	},
-	stats: {
-		queryOptions: () =>
-			queryOptions({
-				queryKey: ["agenda", "stats"],
-				queryFn: () => eventStats(db),
+				queryKey: ["agenda", "snapshot"],
+				queryFn: fetchAgenda,
 			}),
 	},
 	event: {
-		queryOptions: (slug: string) =>
-			queryOptions({
-				queryKey: ["event", slug],
-				queryFn: () => eventBySlug(db, slug),
-			}),
+		queryOptions: eventQueryOptions,
 	},
 	/**
 	 * The events behind the reader's saved slugs. The list itself is not an
-	 * event read — it comes from `/api/saved` — so this is keyed by the slugs
-	 * it was handed and stays disabled until there are any, which is also what
-	 * keeps a signed-out visit from querying Turso at all.
+	 * event read: it comes from `/api/saved`, so this is keyed by the slugs it
+	 * was handed and stays disabled until there are any.
+	 *
+	 * Each slug is its own file, read through the event cache, so unsaving one
+	 * (a new key) re-reads nothing, and an event page already visited costs no
+	 * request. Slugs whose file is gone drop out, which is what lets the page
+	 * list them as no longer available.
 	 */
 	saved: {
 		queryOptions: (slugs: string[]) =>
 			queryOptions({
-				queryKey: ["saved", "events", ...slugs],
-				queryFn: () => eventsBySlugs(db, slugs),
+				// Own root, apart from the slug list's `["saved-slugs"]`: a prefix
+				// cancel or invalidate on one must not catch the other.
+				queryKey: ["saved-events", ...slugs],
+				queryFn: async () => {
+					const events = await Promise.all(
+						slugs.map((slug) =>
+							queryClient.ensureQueryData(eventQueryOptions(slug)),
+						),
+					);
+					return events
+						.filter((event): event is EventDetail => event !== null)
+						.sort((a, b) => a.startAt - b.startAt);
+				},
 				enabled: slugs.length > 0,
+				// Each toggle changes the key; without this the list would drop to
+				// the skeleton for every unsave.
+				placeholderData: keepPreviousData,
 			}),
 	},
 };
-
-/**
- * The window query's row cap, shared with the query itself so the truncation
- * notice can only fire when the safety valve really trips — not while the page
- * is simply showing everything the window holds.
- */
-export const WINDOW_LIMIT = WINDOW_MAX;

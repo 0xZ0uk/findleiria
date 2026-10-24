@@ -75,6 +75,7 @@ function Field({
 	...props
 }: React.ComponentProps<"div"> & VariantProps<typeof fieldVariants>) {
 	return (
+		// biome-ignore lint/a11y/useSemanticElements: shadcn primitive; a <fieldset> would add default browser styling to a generic layout wrapper
 		<div
 			role="group"
 			data-slot="field"
@@ -194,7 +195,7 @@ function FieldError({
 			...new Map(errors.map((error) => [error?.message, error])).values(),
 		];
 
-		if (uniqueErrors?.length == 1) {
+		if (uniqueErrors?.length === 1) {
 			return uniqueErrors[0]?.message;
 		}
 

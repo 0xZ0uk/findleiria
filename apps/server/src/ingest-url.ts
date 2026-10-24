@@ -26,7 +26,7 @@ if (!url.startsWith(SITE)) {
 const { parseDetail } = await import("../src/scraper/leiriagenda");
 const { ingest } = await import("./scraper/ingest");
 
-let raw;
+let raw: ReturnType<typeof import("../src/scraper/leiriagenda").parseDetail>;
 try {
 	raw = parseDetail(await (await fetch(url)).text(), url);
 } catch (err) {

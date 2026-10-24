@@ -1,9 +1,7 @@
-import dotenv from "dotenv";
 import { defineConfig } from "drizzle-kit";
 
-dotenv.config({ path: "../../apps/server/.env" });
-dotenv.config({ path: "../../apps/web/.env" });
-
+// Env comes from the repo-root .env.schema: the db:* scripts run drizzle-kit
+// through `varlock run`, which validates and injects the #auth items.
 const url = process.env.AUTH_DATABASE_URL ?? "file:../../local-auth.db";
 
 export default defineConfig({

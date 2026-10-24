@@ -1,5 +1,13 @@
 import { PERIOD_PRESETS } from "@events-tracker/api/period";
-import { Check, ChevronDown, Copy, List, Map, Search, X } from "lucide-react";
+import {
+	Check,
+	ChevronDown,
+	Copy,
+	List,
+	Map as MapIcon,
+	Search,
+	X,
+} from "lucide-react";
 import { useCallback, useId, useState } from "react";
 import type { Agenda, Facet } from "@/hooks/use-agenda";
 import { BUTTON, FIELD, LABEL, MICRO } from "./layout";
@@ -182,10 +190,11 @@ function CopyLinkButton({ className }: { className?: string }) {
 function ViewToggle({ agenda }: { agenda: Agenda }) {
 	const views = [
 		{ id: "lista", label: "Lista", Icon: List },
-		{ id: "mapa", label: "Mapa", Icon: Map },
+		{ id: "mapa", label: "Mapa", Icon: MapIcon },
 	] as const;
 
 	return (
+		// biome-ignore lint/a11y/useSemanticElements: a <fieldset> brings its own border, padding and legend; this is a styled segmented control already labelled via aria-label
 		<div
 			role="group"
 			aria-label="Vista"
@@ -199,7 +208,7 @@ function ViewToggle({ agenda }: { agenda: Agenda }) {
 						type="button"
 						onClick={() => agenda.setView(id)}
 						aria-pressed={active}
-						className={`inline-flex h-full items-center gap-1.5 rounded-[3px] px-2.5 text-[14px] font-medium focus-ring motion-safe:transition-colors ${
+						className={`focus-ring inline-flex h-full items-center gap-1.5 rounded-[3px] px-2.5 font-medium text-[14px] motion-safe:transition-colors ${
 							active
 								? "bg-primary text-primary-foreground"
 								: "text-foreground hover:text-primary"

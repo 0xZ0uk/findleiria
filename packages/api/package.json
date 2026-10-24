@@ -9,13 +9,15 @@
 			"default": "./src/*.ts"
 		}
 	},
-	"scripts": {},
+	"scripts": {
+		"test": "bun test",
+		"check-types": "tsc --noEmit"
+	},
 	"dependencies": {
 		"@events-tracker/db": "workspace:*",
 		"@events-tracker/env": "workspace:*",
 		"@trpc/client": "catalog:",
 		"@trpc/server": "catalog:",
-		"dotenv": "catalog:",
 		"drizzle-orm": "^0.45.2",
 		"zod": "catalog:"
 	},

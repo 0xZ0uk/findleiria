@@ -1,4 +1,5 @@
 import tailwindcss from "@tailwindcss/vite";
+import { varlockVitePlugin } from "@varlock/vite-integration";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -17,5 +18,9 @@ export default defineConfig({
 	resolve: {
 		tsconfigPaths: true,
 	},
-	plugins: [tailwindcss(), react()],
+	// varlock loads the repo-root .env.schema (#web items, see package.json),
+	// validates it on `vite dev` / `vite build`, and puts the values in
+	// process.env. Only VITE_-prefixed items reach `import.meta.env`, and every
+	// item the schema marks @sensitive is kept out of client code.
+	plugins: [varlockVitePlugin(), tailwindcss(), react()],
 });

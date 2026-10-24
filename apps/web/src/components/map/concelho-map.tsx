@@ -263,7 +263,8 @@ export default function ConcelhoMap({
 			minZoom: 8,
 			maxZoom: 14,
 			// Fade the shapes in rather than snapping them: the ramp is the content.
-			fadeAnimation: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+			fadeAnimation: !window.matchMedia("(prefers-reduced-motion: reduce)")
+				.matches,
 		});
 		mapRef.current = map;
 		// Pins get their own pane above the shapes: `bringToFront()` on a picked
@@ -276,7 +277,11 @@ export default function ConcelhoMap({
 		const layer = L.geoJSON(features as never, {
 			attribution:
 				'Limites © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-			style: () => ({ color: "transparent", weight: 0.75, fillColor: "transparent" }),
+			style: () => ({
+				color: "transparent",
+				weight: 0.75,
+				fillColor: "transparent",
+			}),
 			onEachFeature: (feature, path) => {
 				const { name, anchor } = (feature as ConcelhoFeature).properties;
 				paths.current.set(name, path as L.Path);
@@ -308,7 +313,10 @@ export default function ConcelhoMap({
 				path.on("mouseout", () => {
 					const shape = paths.current.get(name);
 					const picked = selectedRef.current === name;
-					shape?.setStyle({ weight: picked ? 2 : 0.75, opacity: picked ? 1 : 0.9 });
+					shape?.setStyle({
+						weight: picked ? 2 : 0.75,
+						opacity: picked ? 1 : 0.9,
+					});
 					const element = shape?.getTooltip()?.getElement();
 					if (element?.dataset.borrowed) {
 						element.style.display = "none";
@@ -436,7 +444,10 @@ export default function ConcelhoMap({
 			path.setTooltipContent(label(name, count));
 			// A name on the DOM element, so a test (or a stylesheet) can find a
 			// shape without going through Leaflet's internals.
-			(path.getElement() as Element | undefined)?.setAttribute("data-concelho", name);
+			(path.getElement() as Element | undefined)?.setAttribute(
+				"data-concelho",
+				name,
+			);
 		}
 
 		const container = mapRef.current?.getContainer();

@@ -1,77 +1,83 @@
-// FindLeiria build-time prerender: per-event static HTML pages, per-event OG
-// cards, sitemap.xml and robots.txt into the Vite output directory (apps/web/dist).
-// Plain Node ESM — no TS, no drizzle. Reads the LIVE Turso database.
+// FindLeiria build-time prerender: the static JSON snapshot the SPA reads
+// (dist/data/), per-event static HTML pages with the event embedded, per-event
+// OG cards, sitemap.xml and robots.txt into the Vite output directory.
+// Plain Node ESM. Reads the database once, through the same query functions
+// the dev API uses (packages/api/src/snapshot.ts).
 //
 // Run from apps/web AFTER `vite build`:  node scripts/prerender-events.mjs
+// Env: TURSO_DATABASE_URL + TURSO_AUTH_TOKEN (read-only; never VITE_-prefixed).
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { createClient } from "@libsql/client";
 import { renderOgCard } from "./og-card.mjs";
+import {
+	APP_DIR,
+	buildCredentials,
+	loadSnapshotBuilder,
+	remoteHost,
+} from "./snapshot-lib.mjs";
 
-const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const APP_DIR = path.resolve(SCRIPT_DIR, "..");
 const DIST = path.join(APP_DIR, "dist");
+const DATA = path.join(DIST, "data");
 const SITE = "https://findleiria.vercel.app";
 const LISBON_TZ = "Europe/Lisbon";
 
-// ---------------------------------------------------------------- credentials
-function loadCredentials() {
-	let url = process.env.TURSO_DATABASE_URL || process.env.VITE_TURSO_URL;
-	let token = process.env.TURSO_AUTH_TOKEN || process.env.VITE_TURSO_AUTH_TOKEN;
-
-	if ((!url || !token) && fs.existsSync(path.join(APP_DIR, ".env"))) {
-		const parsed = {};
-		for (const line of fs
-			.readFileSync(path.join(APP_DIR, ".env"), "utf8")
-			.split("\n")) {
-			const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
-			if (!m) continue;
-			let v = m[2].trim();
-			if (
-				(v.startsWith('"') && v.endsWith('"')) ||
-				(v.startsWith("'") && v.endsWith("'"))
-			) {
-				v = v.slice(1, -1);
-			}
-			parsed[m[1]] = v;
+// ------------------------------------------------------------ snapshot guard
+// The page has no other data source, so a build whose snapshot is missing or
+// empty would ship an agenda that can only show an error. Read the files back
+// from disk (not from memory) before calling the build good.
+function assertSnapshotOnDisk(snapshot) {
+	const nonEmpty = (file) => {
+		if (!fs.existsSync(file) || fs.statSync(file).size === 0) {
+			throw new Error(
+				`Snapshot file missing or empty: ${path.relative(DIST, file)}`,
+			);
 		}
-		url = url || parsed.VITE_TURSO_URL;
-		token = token || parsed.VITE_TURSO_AUTH_TOKEN;
+	};
+	const agendaFile = path.join(DATA, "agenda.json");
+	nonEmpty(agendaFile);
+	const agenda = JSON.parse(fs.readFileSync(agendaFile, "utf8"));
+	if (!Array.isArray(agenda.events) || !Array.isArray(agenda.undated)) {
+		throw new Error("dist/data/agenda.json is not an agenda snapshot.");
 	}
-
-	if (!url || !token) {
+	if (agenda.events.length + agenda.undated.length === 0) {
 		throw new Error(
-			"Missing Turso credentials. Set TURSO_DATABASE_URL/TURSO_AUTH_TOKEN (or VITE_TURSO_URL/VITE_TURSO_AUTH_TOKEN) or ensure apps/web/.env has VITE_TURSO_URL and VITE_TURSO_AUTH_TOKEN.",
+			"dist/data/agenda.json has no dated or undated events — refusing to ship an empty agenda.",
 		);
 	}
-	return { url, token };
+	for (const event of snapshot.events) {
+		nonEmpty(path.join(DATA, "events", `${event.slug}.json`));
+	}
+	console.log(
+		`snapshot guard: agenda.json (${agenda.events.length} rows, ${agenda.undated.length} undated) + ${snapshot.events.length} event files`,
+	);
 }
 
-// ---------------------------------------------------- client bundle env guard
-// `vercel pull` writes sensitive project vars as EMPTY strings, so a prebuilt
-// deploy can inline nothing and ship a page that throws at boot. Assert the
-// client bundle actually carries the URL before calling the build good.
-function assertClientBundleHasCredentials(url) {
+// ---------------------------------------------------- client bundle leak guard
+// The bundle used to carry the Turso URL and token. Nothing in it may talk to
+// the database now: fail the build if the database host or a libSQL client
+// shows up in any chunk.
+function assertBundleHasNoDatabase(dbUrl) {
 	const assetsDir = path.join(DIST, "assets");
 	if (!fs.existsSync(assetsDir)) {
 		throw new Error(`Missing ${assetsDir} — run this after vite build.`);
 	}
-	const host = new URL(url.replace(/^libsql:/, "https:")).hostname;
-	const carrier = fs
+	const host = remoteHost(dbUrl);
+	const needles = ["libsql", "VITE_TURSO", ...(host ? [host] : [])];
+	for (const file of fs
 		.readdirSync(assetsDir)
-		.filter((f) => f.endsWith(".js"))
-		.find((f) =>
-			fs.readFileSync(path.join(assetsDir, f), "utf8").includes(host),
-		);
-	if (!carrier) {
-		throw new Error(
-			`Client bundle does not contain ${host}: VITE_TURSO_URL was not inlined at build time. ` +
-				`Deploying this would serve a blank page (the app throws "Invalid environment variables").`,
-		);
+		.filter((f) => f.endsWith(".js"))) {
+		const code = fs.readFileSync(path.join(assetsDir, file), "utf8");
+		const hit = needles.find((needle) => code.includes(needle));
+		if (hit) {
+			throw new Error(
+				`Client bundle ${file} contains "${hit}": the SPA must read the static snapshot, never the database.`,
+			);
+		}
 	}
-	console.log(`client env guard: ${host} inlined in ${carrier}`);
+	console.log(
+		"bundle guard: no database client or credentials in the JS chunks",
+	);
 }
 
 // ------------------------------------------------------------------ entities
@@ -207,16 +213,17 @@ function lisbonDayLabel(epochSeconds) {
 }
 
 // ---------------------------------------------------------------- JSON-LD
+// `row` is one `eventDirectory` row (packages/api/src/queries/events.ts).
 function buildJsonLd(row) {
 	// No parseable machine date => no Event JSON-LD at all.
-	if (row.date_text) return null;
+	if (row.dateText) return null;
 
 	const startAt =
-		typeof row.start_at === "number" && row.start_at > 0 ? row.start_at : null;
+		typeof row.startAt === "number" && row.startAt > 0 ? row.startAt : null;
 	if (startAt === null) return null; // no machine date, nothing consistent to say
 
 	const url = `${SITE}/evento/${row.slug}`;
-	const hasVenue = Boolean(row.venue_name);
+	const hasVenue = Boolean(row.venueName);
 
 	const graph = {
 		"@context": "https://schema.org",
@@ -227,22 +234,22 @@ function buildJsonLd(row) {
 		eventStatus: "https://schema.org/EventScheduled",
 	};
 
-	if (typeof row.end_at === "number" && row.end_at > 0) {
-		graph.endDate = dateOnlyFromEpoch(row.end_at);
+	if (typeof row.endAt === "number" && row.endAt > 0) {
+		graph.endDate = dateOnlyFromEpoch(row.endAt);
 	}
 
-	if (row.image_url) {
-		graph.image = decodeEntities(row.image_url);
+	if (row.imageUrl) {
+		graph.image = decodeEntities(row.imageUrl);
 	}
 
 	if (hasVenue) {
 		graph.location = {
 			"@type": "Place",
-			name: decodeEntities(row.venue_name),
+			name: decodeEntities(row.venueName),
 			address: {
 				"@type": "PostalAddress",
-				addressLocality: row.venue_city
-					? decodeEntities(row.venue_city)
+				addressLocality: row.venueCity
+					? decodeEntities(row.venueCity)
 					: "Leiria",
 				addressRegion: "Leiria",
 				addressCountry: "PT",
@@ -265,40 +272,36 @@ function buildJsonLd(row) {
 // ---------------------------------------------------------------- main
 async function main() {
 	const t0 = Date.now();
-	const { url: dbUrl, token } = loadCredentials();
-	assertClientBundleHasCredentials(dbUrl);
-	const client = createClient({ url: dbUrl, authToken: token });
+	const { url: dbUrl, token } = buildCredentials();
+	assertBundleHasNoDatabase(dbUrl);
 
-	const SQL = `SELECT e.slug, e.title, e.description, e.start_at, e.end_at, e.date_text,
-      e.image_url, e.url, e.categories, e.updated_at, v.name AS venue_name, v.city AS venue_city
-    FROM events e LEFT JOIN venues v ON v.id = e.venue_id
-    ORDER BY e.start_at DESC`;
-
-	let result;
+	const { buildSnapshot, writeSnapshot, createReadDb, EMBEDDED_EVENT_ID } =
+		await loadSnapshotBuilder();
+	const db = createReadDb(dbUrl, token);
+	let snapshot;
 	try {
-		result = await client.execute(SQL);
+		snapshot = await buildSnapshot(db);
 	} catch (err) {
-		await client.close();
-		console.error("[prerender] Turso query FAILED:", err);
+		console.error("[prerender] database read FAILED:", err);
 		process.exit(1);
+	} finally {
+		db.$client.close();
 	}
 
-	const columns = result.columns;
-	const rows = (result.rows || []).map((arr) => {
-		const o = {};
-		columns.forEach((c, i) => {
-			o[c] = arr[i];
-		});
-		return o;
-	});
-	await client.close();
-
+	// Every event, newest first, with its description: pages, cards, sitemap.
+	const rows = snapshot.events;
 	if (rows.length === 0) {
 		console.error(
 			"[prerender] FAIL: query returned 0 events — refusing to write a build with no pages.",
 		);
 		process.exit(1);
 	}
+
+	const written = writeSnapshot(DATA, snapshot);
+	assertSnapshotOnDisk(snapshot);
+	console.log(
+		`[prerender] snapshot: ${written.files} files, ${(written.bytes / 1024).toFixed(0)} KB in dist/data`,
+	);
 
 	// Base page template
 	const distIndex = path.join(DIST, "index.html");
@@ -337,15 +340,13 @@ async function main() {
 
 		// ---- OG card
 		const hasMachineDate =
-			!row.date_text && typeof row.start_at === "number" && row.start_at > 0;
+			!row.dateText && typeof row.startAt === "number" && row.startAt > 0;
 		const dayLabel = hasMachineDate
-			? lisbonDayLabel(row.start_at)
-			: row.date_text
-				? decodeEntities(row.date_text)
+			? lisbonDayLabel(row.startAt)
+			: row.dateText
+				? decodeEntities(row.dateText)
 				: "";
-		const venueLabel = row.venue_name
-			? decodeEntities(row.venue_name)
-			: "Leiria";
+		const venueLabel = row.venueName ? decodeEntities(row.venueName) : "Leiria";
 		const png = await renderOgCard({
 			title: titleText || "Evento",
 			dayLabel,
@@ -361,13 +362,16 @@ async function main() {
 		const ogImageUrl = `${SITE}/og/${slug}.png`;
 
 		let html = baseHtml;
+		// Replacer functions throughout: with a string, a `$&` in event text
+		// (an escaped `$'` becomes `$&#39;`) would splice in the matched tag.
 		html = html.replace(
 			ORIG_TITLE,
-			`<title>${escapeHTML(titleText || "Evento")} — FindLeiria</title>`,
+			() => `<title>${escapeHTML(titleText || "Evento")} — FindLeiria</title>`,
 		);
 		html = html.replace(
 			ORIG_DESC,
-			`<meta\n      name="description"\n      content="${escapeHTML(descText || titleText || "")}"\n    />`,
+			() =>
+				`<meta\n      name="description"\n      content="${escapeHTML(descText || titleText || "")}"\n    />`,
 		);
 
 		const headTags =
@@ -383,14 +387,18 @@ async function main() {
 			`<meta name="twitter:image" content="${ogImageUrl}" />\n` +
 			"</head>\n";
 
-		let insertSnippet = headTags;
+		// The event itself, so the SPA paints this page on a cold load without a
+		// request or a skeleton (read by readEmbeddedEvent in src/utils/snapshot.ts).
+		// `<` is escaped so no field can close the script element.
+		const embedded = JSON.stringify(row).replace(/</g, "\\u003c");
+		let insertSnippet = `<script type="application/json" id="${EMBEDDED_EVENT_ID}">${embedded}</script>\n${headTags}`;
 		if (jsonLd) {
 			const json = JSON.stringify(jsonLd).replace(/</g, "\\u003c");
-			insertSnippet = `<script type="application/ld+json">${json}</script>\n${headTags}`;
+			insertSnippet = `<script type="application/ld+json">${json}</script>\n${insertSnippet}`;
 		}
 
 		const beforeHead = html;
-		html = html.replace("</head>\n", insertSnippet);
+		html = html.replace("</head>\n", () => insertSnippet);
 		if (html === beforeHead) {
 			throw new Error(
 				`Could not find the </head> insertion point for ${slug} — Vite's index.html changed shape.`,
@@ -405,8 +413,8 @@ async function main() {
 
 		// ---- sitemap entry
 		const lastmod =
-			typeof row.updated_at === "number" && row.updated_at > 0
-				? new Date(row.updated_at * 1000).toISOString().slice(0, 10)
+			typeof row.updatedAt === "number" && row.updatedAt > 0
+				? new Date(row.updatedAt * 1000).toISOString().slice(0, 10)
 				: new Date(Date.now()).toISOString().slice(0, 10);
 		sitemapUrls.push({ loc: pageUrl, lastmod });
 	}

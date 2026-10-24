@@ -1,35 +1,10 @@
-import { beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
-import { migrate } from "drizzle-orm/libsql/migrator";
 
-// `bun test` shares one module registry across a package's test files, so
-// `authEnv` and the module-level `authDb` are process-wide singletons: whoever
-// imports `db.ts` first pins AUTH_DATABASE_URL for everyone. So this file only
-// supplies a throwaway local file DB when the env was not already configured,
-// and never overrides or closes what a sibling test file set up. The `file:`
-// prefix guarantees we are on a local file — never the remote Turso database,
-// even though the outer shell exports an AUTH_DATABASE_URL and AUTH_TURSO_TOKEN.
-if (!process.env.BETTER_AUTH_SECRET) {
-	process.env.AUTH_DATABASE_URL = `file:${mkdtempSync(join(tmpdir(), "findleiria-saved-"))}/auth.db`;
-	process.env.AUTH_TURSO_TOKEN = "";
-	process.env.BETTER_AUTH_SECRET = "test-secret-long-enough-to-sign-cookies";
-	process.env.BETTER_AUTH_URL = "http://localhost:3300";
-	process.env.GOOGLE_CLIENT_ID = "google-client-id-test";
-	process.env.GOOGLE_CLIENT_SECRET = "google-client-secret-test";
-}
-
-const { authDb: db } = await import("./db");
-const schema = await import("./schema");
-const { listSavedSlugs, saveEvent, unsaveEvent } = await import("./saved");
-
-// Idempotent: the migration journal already records applied migrations, so
-// running this against a database auth.test.ts migrated is a no-op.
-beforeAll(async () => {
-	await migrate(db, { migrationsFolder: "src/migrations" });
-});
+// The database (fresh, file:, already migrated) comes from the bun preload.
+import { authDb as db } from "./db";
+import { listSavedSlugs, saveEvent, unsaveEvent } from "./saved";
+import * as schema from "./schema";
 
 async function createUser(id: string, email: string) {
 	const now = new Date();

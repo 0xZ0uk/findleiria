@@ -28,14 +28,13 @@
  * with a null `lat` are considered.
  */
 import { readFileSync } from "node:fs";
-
-import { municipalityOf, scopeOfName } from "@events-tracker/api/places";
 import {
 	boundsOf,
 	boundsOfAll,
 	concelhoAt,
 	type Shape,
 } from "@events-tracker/api/geo";
+import { municipalityOf, scopeOfName } from "@events-tracker/api/places";
 import { db, schema } from "@events-tracker/db";
 import { eq, isNotNull, isNull } from "drizzle-orm";
 
@@ -126,9 +125,7 @@ async function search(
 		}
 		return (await res.json()) as NominatimHit[];
 	} catch (err) {
-		console.error(
-			`  request failed for "${query}": ${(err as Error).message}`,
-		);
+		console.error(`  request failed for "${query}": ${(err as Error).message}`);
 		return [];
 	} finally {
 		clearTimeout(timer);

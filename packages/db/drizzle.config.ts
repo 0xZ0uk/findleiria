@@ -1,10 +1,7 @@
-import dotenv from "dotenv";
 import { defineConfig } from "drizzle-kit";
 
-dotenv.config({
-	path: "../../apps/server/.env",
-});
-
+// Env comes from the repo-root .env.schema: the db:* scripts run drizzle-kit
+// through `varlock run`, which validates and injects the #db items.
 export default defineConfig({
 	schema: "./src/schema",
 	out: "./src/migrations",

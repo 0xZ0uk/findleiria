@@ -1,4 +1,4 @@
-import { toEpochInLisbon } from "./fingerprint";
+import { toEpochInLisbonOrNull } from "./fingerprint";
 import { defaultFetchText } from "./http";
 import type { RawEvent } from "./types";
 
@@ -430,11 +430,14 @@ interface ScrapeDeps {
 
 export const DESCRIPTION_LIMIT = 600;
 
-/** Build a RawEvent for one parsed feed item (never throws → per-item resilient). */
-export function parseEvent(item: ParsedItem): RawEvent | null {
+/** Why an item produced no event: no slug (silently dropped) or a date that
+ * cannot exist ("31 de fevereiro" — counted as a failure). */
+type ItemOutcome = RawEvent | "no-slug" | "bad-date";
+
+function buildEvent(item: ParsedItem): ItemOutcome {
 	const slug = item.link.split("/").filter(Boolean).at(-1) ?? "";
 	if (!slug) {
-		return null;
+		return "no-slug";
 	}
 	// descriptionHtml is fully entity-decoded real HTML. Strip tags by regex —
 	// cheerio's text() serializer mangles astral-plane chars (📌, 🗣) into lone
@@ -446,14 +449,24 @@ export function parseEvent(item: ParsedItem): RawEvent | null {
 	const date = extractDate(stripped, item.pubDateMs ?? Date.now());
 	const img =
 		item.descriptionHtml.match(/<img[^>]*\ssrc="([^"]+)"/i)?.[1] ?? null;
+	const startAt = date
+		? toEpochInLisbonOrNull(
+				date.year,
+				date.month,
+				date.day,
+				date.hour,
+				date.minute,
+			)
+		: null;
+	if (date && startAt == null) {
+		return "bad-date";
+	}
 
 	return {
 		title: item.title,
 		slug,
 		description: stripped ? stripped.slice(0, DESCRIPTION_LIMIT) : null,
-		startAt: date
-			? toEpochInLisbon(date.year, date.month, date.day, date.hour, date.minute)
-			: null,
+		startAt,
 		endAt: null,
 		dateText: date ? null : extractDateText(stripped),
 		venueName: extractVenue(stripped),
@@ -464,11 +477,31 @@ export function parseEvent(item: ParsedItem): RawEvent | null {
 	};
 }
 
+/** Build a RawEvent for one parsed feed item (never throws → per-item
+ * resilient; null for a missing slug or an impossible calendar date). */
+export function parseEvent(item: ParsedItem): RawEvent | null {
+	const out = buildEvent(item);
+	return typeof out === "string" ? null : out;
+}
+
 /** Parse the whole RSS feed into RawEvents. Drop items that have no slug. */
 export function parseFeed(xml: string): RawEvent[] {
-	return parseItems(xml)
-		.map(parseEvent)
-		.filter((e): e is RawEvent => e !== null);
+	return parseFeedCounted(xml).events;
+}
+
+/** parseFeed plus a count of items skipped for an impossible date. */
+function parseFeedCounted(xml: string): {
+	events: RawEvent[];
+	failures: number;
+} {
+	const events: RawEvent[] = [];
+	let failures = 0;
+	for (const item of parseItems(xml)) {
+		const out = buildEvent(item);
+		if (out === "bad-date") failures++;
+		else if (out !== "no-slug") events.push(out);
+	}
+	return { events, failures };
 }
 
 export interface ScrapeResult {
@@ -486,5 +519,10 @@ export async function scrape(
 	deps: ScrapeDeps = { fetchText: defaultFetchText },
 ): Promise<ScrapeResult> {
 	const xml = await deps.fetchText(RSS_URL);
-	return { events: parseFeed(xml), failures: 0, firstError: null };
+	const { events, failures } = parseFeedCounted(xml);
+	return {
+		events,
+		failures,
+		firstError: failures > 0 ? "item with an impossible calendar date" : null,
+	};
 }
