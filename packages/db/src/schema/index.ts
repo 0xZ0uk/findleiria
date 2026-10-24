@@ -123,7 +123,7 @@ export const eventSources = sqliteTable(
  * it; without this record the next scrape no longer recognises the item,
  * re-inserts it and reconcile absorbs it again, every run. Ingest resolves
  * aliases before minting a row. Scraper bookkeeping only: never published to
- * Turso (see publish-turso.ts).
+ * D1 (see publish-d1.ts).
  */
 export const eventAliases = sqliteTable(
 	"event_aliases",

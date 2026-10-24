@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { createReadDb, type Db } from "@events-tracker/db/client";
+import {
+	createD1ReadDb,
+	createReadDb,
+	type Db,
+} from "@events-tracker/db/client";
 
 import {
 	eventDirectory,
@@ -25,7 +29,8 @@ import {
  * The build-time half of the static snapshot (see `./snapshot-shape.ts`).
  *
  * The query functions in `./queries/events`, run once against
- * Turso (production build) or `local.db` (dev), and written out as JSON.
+ * D1 over the REST API (production build) or `local.db` (dev), and written out
+ * as JSON.
  * Node-only: the web bundle never imports this file, only the shape module.
  */
 
@@ -38,7 +43,7 @@ export type Snapshot = {
 };
 
 export { EMBEDDED_EVENT_ID } from "./snapshot-shape";
-export { createReadDb };
+export { createD1ReadDb, createReadDb };
 
 /** Read everything the site serves, in four queries. */
 export async function buildSnapshot(

@@ -1,6 +1,6 @@
 /**
  * The ONE daily job (C10): every source → the post-passes once → publish to
- * Turso (packages/db `db:publish`, which also asks Vercel to rebuild) → a
+ * D1 (packages/db `db:publish`, which also asks Workers Builds to rebuild) → a
  * summary. This is what cron runs:
  *
  *   pnpm --filter server daily
@@ -11,7 +11,7 @@
  *     database may be half-cleaned), or more than half of the sources failed
  *     (a network outage or a broken machine, and publishing would only push a
  *     staler copy over a good one). One or a few failed sources still publish:
- *     the rest of the district is fresh, and Turso's copy of the failed
+ *     the rest of the district is fresh, and D1's copy of the failed
  *     source's events is no better than ours;
  *   - exit code 0 only when every source ran, the post-passes ran and the
  *     publish (with its redeploy) succeeded; 1 otherwise, so cron reports any
@@ -78,16 +78,17 @@ export function formatSummary(
 		published == null
 			? `publish SKIPPED: ${decision.reason}`
 			: published
-				? `published to Turso (${decision.reason})`
+				? `published to D1 (${decision.reason})`
 				: `publish FAILED (${decision.reason})`,
 	);
 	return lines.join("\n");
 }
 
 /**
- * Run packages/db's `db:publish` (the Turso mirror + deploy hook). It runs
- * under its own `varlock run`, which loads the `#db` env (Turso URL, the
- * read/write token, the hook) that this process is not given.
+ * Run packages/db's `db:publish` (the D1 mirror + deploy hook). It runs
+ * under its own `varlock run`, which loads the `#db` env (the Cloudflare
+ * account, the events D1 id, the D1-edit token, the hook) that this process
+ * is not given. Exit 0 means the swap committed and the hook was accepted.
  */
 async function publish(): Promise<boolean> {
 	const env: Record<string, string> = {};

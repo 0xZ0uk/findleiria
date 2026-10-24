@@ -1,0 +1,13 @@
+# Cache headers for Workers Static Assets.
+
+# Hashed build output never changes under the same name.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The snapshot is replaced on every deploy: always revalidate.
+/data/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+# OG cards: one day.
+/og/*
+  Cache-Control: public, max-age=86400

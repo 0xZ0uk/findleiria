@@ -1,10 +1,10 @@
 /**
  * Auth round-trip against a real libSQL file database, through the same Hono
- * handler the Vercel function and the dev server use.
+ * handler the Worker and the dev server use.
  *
  * The database and its migrations come from the bun preload (test-setup.ts),
- * which also guarantees nothing here can reach a real database or a real SMTP
- * server. Mail goes to an in-memory outbox.
+ * which also guarantees nothing here can reach a real database or send real mail.
+ * Mail goes to an in-memory outbox.
  *
  * The point is the schema: a hand-written Drizzle schema is only correct if
  * better-auth can actually read and write it, so every assertion here walks
@@ -485,7 +485,7 @@ describe("rate limiting", () => {
 			headers: {
 				origin: ORIGIN,
 				"content-type": "application/json",
-				"x-forwarded-for": ip,
+				"cf-connecting-ip": ip,
 			},
 			body: JSON.stringify({
 				email: "ninguem@findleiria.pt",

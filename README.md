@@ -42,9 +42,11 @@ pnpm env:check           # = varlock load: validates, prints values (secrets mas
 ```
 
 Everything else has a working default in the schema (`local.db`,
-`local-auth.db`, the dev ports); read it for the optional ones (Turso, the
-deploy hook, SMTP, Umami, `DIGEST_KEYWORDS`). Variables exported in the shell
-override both files.
+`local-auth.db`, the dev ports); read it for the optional ones (the D1 and R2
+build values, `SITE_URL`, the deploy hook, `DIGEST_KEYWORDS`). Variables
+exported in the shell override both files. Production uses two separate
+environments, the Workers Builds build variables and the Worker's own
+variables and secrets; see Deploy.
 
 How it is wired:
 
@@ -57,13 +59,17 @@ How it is wired:
 - `bun test` runs with no env at all: Bun's own `.env` loading is off
   (`bunfig.toml`), and the test preloads point every database at a throwaway
   one, so tests never reach a real database.
-- `process.env` is typed from the schema: varlock regenerates `env.d.ts` (and
+- The schema's types are generated too: varlock regenerates `env.d.ts` (and
   `apps/web/src/env.d.ts` for `import.meta.env`) on every load. Both are
-  committed so `tsc` works on a fresh clone.
+  committed so `tsc` works on a fresh clone. `wrangler types` already declares
+  `NodeJS.ProcessEnv` (for the Worker's secrets), so varlock does not; the env
+  modules in `packages/env` and `packages/auth` read schema-typed values
+  instead.
 - Moving from the old per-app files: merge `apps/server/.env`,
   `apps/web/.env` and `packages/db/.env` into the root `.env.local`, then
-  delete them (they are no longer read). `TURSO_AUTH_TOKEN` is the
-  **read-only** token; the publish token is `TURSO_RW_TOKEN`.
+  delete them (they are no longer read). The web build reads the events
+  from D1 with the **read-only** token `D1_READ_API_TOKEN`; publishing uses the
+  D1-edit token `D1_RW_API_TOKEN`.
 - Secrets can be kept encrypted at rest: set a value to `varlock(prompt)` in
   `.env.local` and run `pnpm env:check` (see varlock's local encryption docs).
 - The varlock CLI sends anonymous usage telemetry; opt out once with
@@ -74,9 +80,11 @@ How it is wired:
 package that reads it: `varlock run` strips untagged schema items from a
 package's process), run `pnpm env:check` to regenerate the types, then read it
 from `process.env` (or add it to `env` / `authEnv` in `packages/env` /
-`packages/auth`). If the Vercel build or functions read it, add it to the
-Vercel project env too. Browser code only ever sees `VITE_`-prefixed items,
-and those must be `@public`.
+`packages/auth`). If the production build reads it, add it to the Workers
+Builds build variables; if the Worker reads it, add it as a Worker var or
+secret (and to `secrets.required` in `wrangler.jsonc` if it cannot be missing).
+Browser code only ever sees `VITE_`-prefixed items, and those must be
+`@public`.
 
 Optional: if your machine's dev ports collide (3000/3001 are commonly taken),
 set `PORT` and the matching `CORS_ORIGIN` in `.env.local`, and change the
@@ -171,7 +179,8 @@ DIGEST_KEYWORDS="..." pnpm --filter server digest -- --new 24   # 09:00, pipe to
 
 `daily` (`apps/server/src/scraper/daily.ts`) runs every source in turn, then
 the cleanup passes (purge, venue merge, reconcile) once, then `db:publish`
-(mirror `local.db` into Turso + Vercel deploy hook), then prints a summary.
+(mirror `local.db` into D1, then the Workers Builds deploy hook that rebuilds
+the site from it), then prints a summary.
 
 - One failed source never stops the others.
 - Publish is **skipped** when the batch failed hard: a cleanup pass threw, or
@@ -194,20 +203,30 @@ pages fetched / new / updated / pruned / failed, plus `error`, `warnings`
 Go through the package scripts (they wrap `varlock run`): a bare
 `bun src/...` gets no env, since Bun's own `.env` loading is off.
 
-**One-time Turso migration.** The publish mirrors every local column, and the
-site's build reads all of them, so Turso has to be migrated as far as
-`local.db`. After pulling migrations `0003` (`event_sources.last_seen_at`,
-`event_aliases`) and `0004` (the `scrape_runs` outcome columns), run this once
-from the repo root with the **read/write** token:
+**D1 migrations.** The publish mirrors every local column into the
+`findleiria-events` D1 database, and the site's build reads all of them, so D1
+has to be migrated as far as `local.db`. Apply the same committed drizzle
+migrations (`packages/db/src/migrations`, wired by `packages/db/wrangler.jsonc`)
+whenever new ones land, from the repo root (the auth database has its own
+`db:migrate:remote`, see Deploy):
 
 ```bash
-DATABASE_URL='libsql://<db>-<org>.turso.io' TURSO_AUTH_TOKEN='<TURSO_RW_TOKEN>' \
-  pnpm --filter @events-tracker/db db:migrate
+pnpm --filter @events-tracker/db db:migrate:remote   # wrangler d1 migrations apply findleiria-events --remote
 ```
 
-Values set on the command line win over `.env.local` under `varlock run`.
-`db:publish` refuses to run (and prints this command) while Turso lacks a
-column.
+It uses your `wrangler login`, or `CLOUDFLARE_API_TOKEN=<D1_RW_API_TOKEN>`
+(with `CLOUDFLARE_ACCOUNT_ID` from `.env.local`). `db:publish` refuses to run
+(and prints this command) while D1 lacks a table, column or index.
+
+**How the publish stays atomic.** D1's REST API has no `BEGIN`/`COMMIT`, so
+`db:publish` (`packages/db/src/publish-d1.ts`) loads the rows into
+`<table>_next` staging tables over as many requests as needed, then swaps them
+in with **one** request (check the staged counts, drop the live tables, rename
+the staging ones, rebuild the indexes). D1 runs a multi-statement request as
+one transaction, so the site's build sees the whole old copy or the whole new
+one. A failure before the swap leaves the live tables untouched; leftover
+`_next` tables are dropped by the next run. It also refuses local rows whose
+foreign key points at nothing, since D1 enforces foreign keys.
 
 ### 8. Tests & checks
 
@@ -223,17 +242,28 @@ across server (~430), web (~80), api (~107) and auth (~25); `db` and `env` have
 none. The api query tests run real SQL against a throwaway libSQL file with the
 committed migrations (`packages/api/src/test-db.ts`). To run
 one package: `pnpm --filter server test`. `apps/web`'s `check-types` is plain
-`tsc --noEmit`; the production build (`vite build`) is separate and needs a
-database, so CI does not run it.
+`tsc --noEmit`; the production build (`pnpm cf:build`) is separate and needs D1
+and R2 values, so CI does not run it. `pnpm typecheck` and `pnpm test` also
+cover the Worker (`worker/`, outside turbo's workspaces).
 
 The same lint, typecheck and test steps run on every pull request and on pushes
-to `master` (`.github/workflows/ci.yml`; no secrets needed).
+to `master` (`.github/workflows/ci.yml`; no secrets needed), plus a
+`wrangler deploy --dry-run` and a check that `worker-configuration.d.ts` is
+current (`pnpm cf:types` regenerates it).
 
-### 9. Deploy (Vercel + Turso, no server)
+### 9. Deploy (Cloudflare Workers)
 
-Production is a **static SPA built from a daily snapshot of Turso**. The browser
-never talks to the database: the Vercel build reads Turso once and writes
-everything the site serves into `apps/web/dist/`:
+Production is **one Cloudflare Worker** (`wrangler.jsonc`) serving a **static
+SPA built from a snapshot of D1** plus the same-origin API. The browser never
+talks to a database: the build reads the events from D1 once and writes
+everything the site serves into `apps/web/dist/`, which Workers Static Assets
+hosts. The Worker (`worker/index.ts`) only answers `/api/*` (sign-in, saved
+events, analytics beacon) and `/data/*` (so a missing file is a real 404, not
+the SPA shell); every other path is answered by the assets layer. Same origin
+is deliberate: the session cookie must be first-party (Safari drops
+third-party ones, and most readers are on an iPhone).
+
+The build writes:
 
 - `data/agenda.json`: the agenda (dated rows a little wider than the 90-day
   window, which the page trims against the reader's clock; the undated
@@ -241,88 +271,174 @@ everything the site serves into `apps/web/dist/`:
 - `data/events/<slug>.json`: one file per event, past ones included, for the
   event page and the saved list
 - `evento/<slug>/index.html` (head tags, JSON-LD and the event embedded for a
-  request-free first paint), `og/<slug>.png`, `sitemap.xml`
+  request-free first paint), `og/<slug>.png`, `sitemap.xml`, `robots.txt`
 
 The daily flow (`pnpm --filter server daily`, see Cron automation) is scrape →
-`db:publish` (mirrors `local.db` into Turso) → deploy hook → Vercel rebuild. There is no Hono process in production; the local
-scraper is the only writer.
+`db:publish` (mirrors `local.db` into the `findleiria-events` D1 database) →
+deploy hook → Workers Builds runs the build, which reads that D1 database →
+deploy. There is no Hono process in production; the local scraper is the only
+writer of events. Static Assets allow 20,000 files per version on Free and
+100,000 on Paid, and the build emits about three files per event (json, html,
+png), so Workers **Paid** is what this plan assumes (Free's 10 ms CPU limit
+also breaks password hashing).
+
+#### One-time Cloudflare resources
+
+From a machine with `pnpm exec wrangler login`:
 
 ```bash
-turso db create unreal-events
-export DATABASE_URL="$(turso db show unreal-events --url)"
-export TURSO_AUTH_TOKEN="$(turso db tokens create unreal-events)"
-(cd packages/db && bun run db:migrate)           # then import/dump existing rows
-turso db tokens create unreal-events --read-only # token for the Vercel build
+pnpm exec wrangler d1 create findleiria-events
+pnpm exec wrangler d1 create findleiria-auth      # put its id in wrangler.jsonc (database_id)
+pnpm exec wrangler r2 bucket create findleiria-build-cache
 ```
 
-Vercel: import the repo with **Root Directory = repo root** — `vercel.json` owns
-install/build/output, so no framework preset is needed. Project env
-(Settings → Environment Variables; mark the secrets **Sensitive**). These are
-the schema's `#web` and `#auth` items:
+- **D1 ids.** Commit the `findleiria-auth` id into `wrangler.jsonc`
+  (`d1_databases[0].database_id`, now a zero placeholder). The events database
+  needs no Worker binding; `packages/db/wrangler.jsonc` finds it by name and
+  everything else uses `EVENTS_D1_ID`.
+- **R2.** Create an R2 API token scoped to that one bucket (Object Read &
+  Write) and add a lifecycle rule deleting objects older than 60 days (bumping
+  `OG_CACHE_VERSION` leaves the old `og-cards/v<N>/` prefix behind).
+- **API tokens** (My Profile → API Tokens): one with D1 **read** only for the
+  build (`D1_READ_API_TOKEN`), one with D1 **edit** for `db:publish`
+  (`D1_RW_API_TOKEN`, cron machine only). They are separate on purpose: the
+  build must not be able to write.
+- **Email.** Onboard the sending domain under Compute → Email Service → Email
+  Sending (it needs Cloudflare DNS; `workers.dev` cannot send):
+  `pnpm exec wrangler email sending enable <domain>`.
+- **Web Analytics.** Add the site, copy its token (`VITE_CF_BEACON_TOKEN`).
+  The Analytics Engine dataset `findleiria_events` is created by the first
+  write; custom events go to `POST /api/track` (an allow-list of event names,
+  currently `fonte`).
+- **Google OAuth.** Add `<origin>/api/auth/callback/google` as an authorized
+  redirect URI.
 
-| Variable | Action | Value |
+#### Databases and migrations
+
+Both D1 databases are migrated from the same committed drizzle migrations the
+local files use. Apply new ones before the deploy that needs them (a Worker
+never migrates):
+
+```bash
+pnpm --filter @events-tracker/auth db:migrate:remote   # findleiria-auth: users, sessions, saved events, rate_limit
+pnpm db:migrate:remote                                  # findleiria-events (= pnpm --filter @events-tracker/db db:migrate:remote)
+```
+
+The auth tables, including the `rate_limit` table behind sign-in throttling,
+must exist or sign-in fails. `db:publish` refuses to run while the events
+database lacks a table, column or index. Copying the existing users, sessions
+and saved events over from Turso, and the cutover itself, are in the step-by-step
+runbook [`docs/cloudflare-cutover.md`](docs/cloudflare-cutover.md). Its data
+step is `pnpm --filter @events-tracker/auth db:export-d1` (a local SQLite copy
+of the Turso auth database into a data-only SQL file for D1) followed by
+`db:verify-d1` (row counts per table, compared with D1).
+
+#### Workers Builds
+
+Connect the repo under Workers & Pages → Create → Import a repository (or the
+Worker's Settings → Build). The Worker name must equal `name` in
+`wrangler.jsonc` (`findleiria`).
+
+| Setting | Value |
+| --- | --- |
+| Production branch | `master` |
+| Root directory | `/` |
+| Build command | `pnpm cf:build` (web build + prerender + `varlock scan`; no auth package build, the Worker bundles `packages/auth` from source) |
+| Deploy command | `pnpm cf:deploy` (`wrangler deploy`) |
+| Non-production branch deploy command | `pnpm cf:preview` (`wrangler versions upload`) |
+
+Workers Builds installs dependencies itself and sets `WORKERS_CI=1`. Its
+default image has Node 24 and pnpm 10.11 (the `packageManager` field in
+`package.json` pins the exact pnpm); set `NODE_VERSION=22` as a build variable
+to match CI. Pushes to `master` deploy; any other branch uploads a version with
+its own preview URL. Preview versions share the production bindings (D1,
+secrets), and their origin is not `BETTER_AUTH_URL`, so use them to look at the
+static site, not to sign in.
+
+Two separate environments, and a value in one is invisible to the other (this
+is why the old build-time `env:check:production` is gone):
+
+| Where | Variable | Kind |
 | --- | --- | --- |
-| `TURSO_DATABASE_URL` | **add** (if absent) | the `libsql://…` URL |
-| `TURSO_AUTH_TOKEN` | **add** (if absent) | the **read-only** token; build-time only |
-| `AUTH_DATABASE_URL` | **add** | `libsql://…` of the separate auth database |
-| `AUTH_TURSO_TOKEN` | **add** | its read/write token |
-| `BETTER_AUTH_SECRET` | **add** | 32+ chars (`openssl rand -base64 48`) |
-| `BETTER_AUTH_URL` | **add** | the public origin, e.g. `https://findleiria.vercel.app` |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | **add** | the OAuth client |
-| `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | **add** | required: the functions run with `NODE_ENV=production` |
-| `SMTP_PORT`, `SMTP_SECURE`, `AUTH_TRUSTED_ORIGINS` | optional | defaults `587` / `false` / none |
-| `VITE_UMAMI_SRC`, `VITE_UMAMI_WEBSITE_ID` | optional | public analytics ids |
-| `NODE_ENV` | **do not set** | Vercel sets it; the build check forces `production` |
-| `VITE_TURSO_URL` | **delete** | no longer read; would only invite re-inlining |
-| `VITE_TURSO_AUTH_TOKEN` | **delete** | was inlined into the public bundle |
+| **Build** variables and secrets (Settings → Build) | `CLOUDFLARE_ACCOUNT_ID`, `EVENTS_D1_ID` | plain |
+| | `D1_READ_API_TOKEN` | secret, D1 read-only |
+| | `SITE_URL` | plain: the public origin, e.g. `https://findleiria.pt`. Required: canonical URLs, sitemap, robots.txt and the host printed on OG cards |
+| | `VITE_CF_BEACON_TOKEN` | plain (public by design) |
+| | `R2_ACCOUNT_ID`, `R2_BUILD_CACHE_BUCKET` | plain |
+| | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | secret, bucket-scoped key |
+| | `NODE_VERSION=22` | optional |
+| **Worker** runtime (Settings → Variables & Secrets, or `wrangler secret put`) | `BETTER_AUTH_SECRET` (32+ chars: `openssl rand -base64 48`), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | secrets |
+| | `BETTER_AUTH_URL` (the public origin, exactly what the browser types), `MAIL_FROM` (`FindLeiria <no-reply@<domain>>`) | vars |
+| | `AUTH_TRUSTED_ORIGINS` | optional var, comma-separated |
 
-**Auth database migration (one-time per auth migration, before the deploy that
-needs it).** The functions never migrate: the auth tables, including the
-`rate_limit` table that backs sign-in throttling, must already exist in the
-production auth database, or sign-in fails. Run this from a checkout, with the
-production URL and read/write token in the shell (they override `.env.local`):
+Do not put a `file:` `SNAPSHOT_DATABASE_URL` in the build variables: on
+Workers Builds (`WORKERS_CI`) the build refuses it and always reads D1.
 
-```bash
-AUTH_DATABASE_URL='libsql://<auth-db>.turso.io' AUTH_TURSO_TOKEN='<read-write token>' \
-  pnpm --filter @events-tracker/auth db:migrate
-```
+**Required secrets.** `wrangler.jsonc` declares `secrets.required`
+(`BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`), so
+`wrangler deploy` and `versions upload` fail, naming the missing ones, rather
+than ship a Worker that cannot sign anyone in. A Worker that does not exist yet
+cannot have secrets set in advance, so do the very first deploy by hand:
+`pnpm cf:build && pnpm exec wrangler deploy --secrets-file <file of NAME=value
+lines>`, then connect Workers Builds. The plain vars have no such guard: until
+`BETTER_AUTH_URL`, `MAIL_FROM` and the secrets are all set and well-formed, the
+Worker answers `/api/auth/*` and `/api/saved` with a generic 500
+(`server_misconfigured`) and logs the missing **names** once per isolate
+(`worker/auth-guard.ts`); the static site keeps working. The domain is not
+decided yet, which is why `BETTER_AUTH_URL` and `MAIL_FROM` are not in
+`wrangler.jsonc` `vars`; once it is, add them there (a comment in the file
+has the lines).
 
-OG cards are cached between builds in `apps/web/node_modules/.cache/og-cards`
-(keyed by card content, pruned each build); Vercel restores `node_modules/**`
-with its build cache, and a cold cache just renders every card.
+**What fails the build** (and the previous deployment keeps serving): missing
+`SITE_URL`; missing D1 variables; a `file:` snapshot source on Workers Builds;
+a database with no events; a snapshot file that is missing or empty; or any JS
+chunk containing the D1 database id, the read token, the Cloudflare API path or
+a libSQL client. After the prerender, `varlock scan ./dist` fails the build if
+any `@sensitive` value present in the build env appears anywhere in the
+published output. D1 reads in the build retry 429 and 5xx up to three times
+with backoff (honouring `Retry-After`); the publish writes never retry.
 
-The build command first runs `pnpm --filter ./packages/auth env:check:production`
-(`NODE_ENV=production varlock load` over the `#auth` items), so a missing or
-malformed auth variable fails the deploy rather than the first sign-in. The
-functions read `process.env` as Vercel injects it: a deployment's env cannot
-change without a rebuild, so they run on values the build already checked.
-After the prerender, `varlock scan ./dist` fails the build if any `@sensitive`
-value present in the build env (tokens, auth secrets, the Turso URL) appears
-anywhere in the published output.
+#### OG card cache (R2)
 
-The build fails, and Vercel keeps serving the previous deployment, if
-`TURSO_DATABASE_URL` is missing, the database has no events, a snapshot file is
-missing or empty, or any JS chunk contains the database host or a libSQL client.
-Since the old read-only token shipped in every bundle, consider rotating it:
-`turso db tokens invalidate unreal-events` revokes every token for the
-database, so then issue a new read-only one for Vercel and a new read/write one
-for `db:publish`.
+Rendered cards are cached between builds in the `findleiria-build-cache`
+bucket under `og-cards/v<N>/<key>.png` (`apps/web/scripts/og-r2.mjs`, S3 API
+with the `R2_*` build variables). The key hashes the card text, the template
+(renderer + fonts) and the site host, so changing `SITE_URL` re-renders every
+card. Before rendering the build downloads the keys it needs, after rendering
+it uploads the new ones and deletes the unused ones. With the `R2_*` variables
+unset the build is simply cold (renders everything), never failed.
 
-Redeploy after publish (otherwise events scraped since the last deploy have no
-page, card or sitemap entry): in Vercel, **Settings → Git → Deploy Hooks**,
-create a hook for the production branch, and set it as
-`VERCEL_DEPLOY_HOOK_URL` in the root `.env.local` on the machine that runs the
-cron, next to `TURSO_DATABASE_URL` and the read/write `TURSO_RW_TOKEN` (see
-the `#db` items in `.env.schema`). `db:publish` POSTs to it only after Turso
-has committed, and exits non-zero if the hook fails.
+#### Redeploy after publish
+
+Otherwise events scraped since the last deploy have no page, card or sitemap
+entry. In the Worker's Settings → Build → **Deploy Hooks**, create a hook for
+the production branch and set its URL as `DEPLOY_HOOK_URL` in the root
+`.env.local` on the machine that runs the cron, next to `CLOUDFLARE_ACCOUNT_ID`,
+`EVENTS_D1_ID` and the D1-edit `D1_RW_API_TOKEN` (see the `#db` items in
+`.env.schema`). `db:publish` POSTs to it only after the D1 swap has committed,
+logs the host and the `build_uuid` Workers Builds answers with, and exits
+non-zero if the hook fails ("published but not redeployed"). The URL is the
+credential (no header is needed): treat it as a secret, and delete and recreate
+the hook if it leaks. A hook fired while the previous build is still queued does
+not start another; it answers with that build. Limits: 10 builds a minute per
+Worker.
+
+#### CI
+
+`.github/workflows/ci.yml` runs lint, typecheck, tests, the Worker's typecheck
+and tests, a check that `worker-configuration.d.ts` matches `wrangler.jsonc`
+(`pnpm cf:types`, re-run it after editing the config), and
+`wrangler deploy --dry-run` so binding and config drift fails the pull request.
+It never builds the site (that needs D1 and R2 secrets) or deploys.
 
 ## Stack
 
 pnpm + Bun monorepo · React SPA with pathname routing, no router library (web,
-:3300) · better-auth (Google + email/password) on a separate libSQL database ·
-Drizzle + libSQL (`local.db` in dev, remote Turso in production) · Hono
-survives as a **local-dev only** surface (auth, saved events, digest) ·
-Turborepo + Biome.
+:3300) · better-auth (Google + email/password) on a separate auth database ·
+Drizzle (libSQL files `local.db` / `local-auth.db` in dev, Cloudflare D1 in
+production) · one Cloudflare Worker serves the static SPA and `/api`
+(Workers Static Assets + Hono, built by Workers Builds) · Hono also runs as a
+**local-dev only** server (auth, saved events, digest) · Turborepo + Biome.
 
 ```
 apps/server/     scraper (src/scraper/) + digest CLI; Hono API for dev only
@@ -331,7 +447,8 @@ packages/api/    query functions (src/queries/), snapshot builder
 packages/auth/   better-auth config, auth DB schema + migrations, Hono routes
 packages/db/     Drizzle schema, migrations, seeds (src/client.ts = env-free read client)
 packages/ui/     shared tokens (styles/globals.css) and primitives; see DESIGN.md
-api/             Vercel functions for /api/auth and saved events
+worker/          the Cloudflare Worker entry: /api/auth, /api/saved, /api/track, /data/*
+wrangler.jsonc   Worker config: assets, D1/email/analytics bindings, Workers Builds settings
 ```
 
 ## Commands
@@ -348,6 +465,10 @@ pnpm --filter server geocode:venues     # Nominatim geocoding (idempotent)
 pnpm --filter server digest             # plaintext digest (--new N supported)
 pnpm --filter server ingest:url -- <url> [venue]   # paste-a-link ingest
 pnpm dev                    # turbo dev (web :3300, server :3301)
+pnpm cf:build               # the production build (what Workers Builds runs)
+pnpm cf:deploy              # wrangler deploy (Workers Builds runs it; first deploy by hand)
+pnpm cf:preview             # wrangler versions upload (non-production branches)
+pnpm cf:types               # regenerate worker-configuration.d.ts after editing wrangler.jsonc
 ```
 
 Sources registry: `apps/server/src/scraper/index.ts` —
@@ -367,7 +488,7 @@ eventbrite, viralagenda, ticketline, ...).
    gains a date.
 4. **Serve** — the SPA reads no database: it fetches the static JSON snapshot
    (`/data/agenda.json`, `/data/events/<slug>.json`) that the build writes from
-   Turso (see Deploy). The dev-only Hono server mounts the auth routes,
+   D1 (see Deploy). The dev-only Hono server mounts the auth routes,
    `/api/saved` and `/digest` (JSON); there is no query API.
 5. **Cron (Hermes)** — `daily` at 07:00 (all sources, cleanup passes once,
    publish; an empty listing prints an `ALERT` line), daily Discord digest 09:00 (`DIGEST_KEYWORDS`

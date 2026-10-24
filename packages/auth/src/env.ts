@@ -1,55 +1,52 @@
-/// <reference path="../../../env.d.ts" />
+import type { EnvSchemaAsStrings } from "../../../env";
 
 /**
  * Env for the auth runtime only, read from `process.env`.
  *
- * Deliberately separate from `@events-tracker/env/server`: the auth function
- * lives on Vercel and has no business requiring the events `DATABASE_URL` or
- * `CORS_ORIGIN` just to boot. Two databases, two env modules.
+ * Deliberately separate from `@events-tracker/env/server`: the Worker's auth
+ * routes have no business requiring the events `DATABASE_URL` or `CORS_ORIGIN`
+ * just to boot. Two databases, two env modules.
  *
- * Nothing is validated here. The rules (required, the 32-char secret, SMTP_*
- * required when NODE_ENV=production, URL shapes) live in the repo-root
- * `.env.schema` under `#auth`, and varlock enforces them before this code runs:
- * locally every script goes through `varlock run`, and on Vercel the build
- * command validates the project env with NODE_ENV=production. A deployment's
- * env cannot change without a new build, so the functions boot on values the
- * build already checked. `process.env` is typed from the schema (`env.d.ts`).
+ * Nothing is validated here. The rules (required, the 32-char secret, URL
+ * shapes) live in the repo-root `.env.schema` under `#auth`. Locally varlock
+ * enforces them before this code runs: every script goes through
+ * `varlock run`. In the Worker nothing validates at build time (the build and
+ * the Worker have separate environments), so the secrets are declared in
+ * `secrets.required` (wrangler.jsonc) and the Worker re-checks every value per
+ * request (`missingAuthEnv`, env-check.ts; worker/auth-guard.ts). Under
+ * `nodejs_compat` the Worker's vars and secrets are on `process.env`.
+ * The values are typed from the schema (`env.d.ts`) through `schemaEnv`:
+ * wrangler's types already declare `NodeJS.ProcessEnv`, so varlock leaves it
+ * alone.
  *
- * What stays here is what the raw environment cannot carry: the schema's
- * defaults (Vercel injects none) and the string-to-number/boolean coercion.
- * Read once at import, as before; empty strings count as unset.
+ * What stays here is what the raw environment cannot carry: the string-to-
+ * number/boolean coercion and the "empty means unset" rule. Read once at
+ * import, as before.
  */
-const read = (value: string | undefined) => (value === "" ? undefined : value);
+const schemaEnv = process.env as unknown as EnvSchemaAsStrings;
 
-/** varlock's `@type=boolean` spellings of true; the rest it accepts are false. */
-const TRUE = new Set(["t", "true", "yes", "on", "1"]);
+const read = (value: string | undefined) => (value === "" ? undefined : value);
 
 type NodeEnv = "development" | "production" | "test";
 
 export const authEnv = {
-	// libSQL URL of the auth database. `file:...` in dev, `libsql://...` in prod.
-	AUTH_DATABASE_URL: process.env.AUTH_DATABASE_URL,
-	// Only set when AUTH_DATABASE_URL points at a remote Turso database.
-	AUTH_TURSO_TOKEN: read(process.env.AUTH_TURSO_TOKEN),
+	// Dev/test only: `file:` URL of the auth database (a SQLite file), read by
+	// auth-db.node.ts under Bun. Production runs on the D1 `AUTH_DB` binding and
+	// never reads it.
+	AUTH_DATABASE_URL: read(schemaEnv.AUTH_DATABASE_URL),
 	// Signs session cookies. Rotating it logs everyone out.
-	BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
+	BETTER_AUTH_SECRET: schemaEnv.BETTER_AUTH_SECRET,
 	// Public origin of the app, used for callback URLs and trusted origins.
-	BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
-	// Comma-separated extra origins (vercel previews, localhost ports).
-	AUTH_TRUSTED_ORIGINS: read(process.env.AUTH_TRUSTED_ORIGINS),
-	GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
-	GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
-	// Outgoing mail (email verification). When unset outside production the
-	// mailer prints the message instead of sending it.
-	SMTP_HOST: read(process.env.SMTP_HOST),
-	SMTP_PORT: Number(read(process.env.SMTP_PORT) ?? 587),
-	// true = implicit TLS (port 465). false = plain, upgraded by STARTTLS (587).
-	SMTP_SECURE: TRUE.has(read(process.env.SMTP_SECURE)?.toLowerCase() ?? ""),
-	SMTP_USER: read(process.env.SMTP_USER),
-	SMTP_PASS: read(process.env.SMTP_PASS),
-	// Sender, e.g. "FindLeiria <no-reply@example.com>".
-	SMTP_FROM: read(process.env.SMTP_FROM),
-	NODE_ENV: (read(process.env.NODE_ENV) ?? "development") as NodeEnv,
+	BETTER_AUTH_URL: schemaEnv.BETTER_AUTH_URL,
+	// Comma-separated extra origins (preview deployments, localhost ports).
+	AUTH_TRUSTED_ORIGINS: read(schemaEnv.AUTH_TRUSTED_ORIGINS),
+	GOOGLE_CLIENT_ID: schemaEnv.GOOGLE_CLIENT_ID,
+	GOOGLE_CLIENT_SECRET: schemaEnv.GOOGLE_CLIENT_SECRET,
+	// Sender of the verification mail, e.g. "FindLeiria <no-reply@findleiria.pt>",
+	// on a domain onboarded to Cloudflare Email Sending. Only the Worker's mail
+	// transport reads it; the local one just prints the message.
+	MAIL_FROM: read(schemaEnv.MAIL_FROM),
+	NODE_ENV: (read(schemaEnv.NODE_ENV) ?? "development") as NodeEnv,
 };
 
 /**

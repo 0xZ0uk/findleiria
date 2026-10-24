@@ -1,0 +1,124 @@
+// One Worker serves the whole site: the static SPA (Workers Static Assets) and
+// the same-origin API. Same origin is not a preference: cookies from a separate
+// API domain are third-party cookies, which Safari refuses, and most readers
+// arrive on an iPhone.
+//
+// WORKERS BUILDS (Workers & Pages > findleiria > Settings > Build). The Worker
+// name in the dashboard must equal `name` below.
+//   Repository ............ this repo; production branch = master
+//   Root directory ........ /                    (this file lives at the root)
+//   Build command ......... pnpm cf:build        (web build + prerender + `varlock scan`)
+//   Deploy command ........ pnpm cf:deploy       (= wrangler deploy)
+//   Non-production branch
+//   deploy command ........ pnpm cf:preview      (= wrangler versions upload)
+// Workers Builds installs dependencies itself (pnpm, from the lockfile and the
+// `packageManager` field), so there is no install step. It sets WORKERS_CI=1,
+// which makes the build refuse a `file:` SNAPSHOT_DATABASE_URL.
+//
+// Two separate environments; a value set in one is NOT visible in the other.
+//
+//   BUILD variables and secrets (Settings > Build > Variables and Secrets).
+//   Read by `pnpm cf:build` only; they never reach the Worker.
+//     CLOUDFLARE_ACCOUNT_ID, EVENTS_D1_ID     plain
+//     D1_READ_API_TOKEN                       secret (READ-only D1 token)
+//     R2_ACCOUNT_ID, R2_BUILD_CACHE_BUCKET    plain
+//     R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY  secret (bucket-scoped key)
+//     VITE_CF_BEACON_TOKEN                    plain (public by design)
+//     SITE_URL                                plain (the public origin, e.g.
+//                                             https://example.pt; no trailing slash)
+//     Optional: NODE_VERSION=22 (the default image has 24; CI runs 22).
+//
+//   WORKER runtime (Settings > Variables & Secrets, or `wrangler secret put`).
+//   Read by the auth routes while serving requests; the build never sees them.
+//     secrets: BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+//              (declared in `secrets.required` below, so `wrangler deploy` and
+//              `wrangler versions upload` fail when one is missing)
+//     vars:    BETTER_AUTH_URL, MAIL_FROM, AUTH_TRUSTED_ORIGINS (optional)
+//              Not in `vars` below on purpose: the domain is not decided, and a
+//              guessed value would ship in the repo. Once it is, add:
+//                "BETTER_AUTH_URL": "https://<domain>",
+//                "MAIL_FROM": "FindLeiria <no-reply@<domain>>",
+//                "AUTH_TRUSTED_ORIGINS": "<preview origins, comma-separated>"
+//              Until then the auth routes answer 500 `server_misconfigured` and
+//              log the missing NAMES once (worker/auth-guard.ts).
+//
+// First deploy: a Worker that does not exist yet cannot have secrets set in
+// advance, and `secrets.required` makes a deploy without them fail. Do it once
+// by hand: `pnpm cf:build && pnpm exec wrangler deploy --secrets-file <file of
+// NAME=value lines>`, then connect the repo to Workers Builds.
+//
+// The deploy hook (DEPLOY_HOOK_URL) is created on the same Build settings page
+// and lives only on the cron machine; see the README.
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "findleiria",
+	"main": "worker/index.ts",
+	// nodejs_compat gives better-auth and drizzle the Node APIs they import and
+	// fills process.env from vars/secrets. Bump the date deliberately: it pins
+	// the runtime behaviour, and `pnpm cf:types` must be re-run with it.
+	"compatibility_date": "2026-10-19",
+	"compatibility_flags": ["nodejs_compat"],
+
+	"assets": {
+		// The Vite output plus the prerendered data/, evento/ and og/ folders.
+		// The web build must have run before `wrangler dev` or `wrangler deploy`.
+		"directory": "apps/web/dist",
+		"binding": "ASSETS",
+		// The SPA picks its page from the pathname, so any path that is not a file
+		// gets the shell (index.html). This is also how an unknown /evento/<slug>
+		// shows the in-app "not found" page.
+		"not_found_handling": "single-page-application",
+		// Folder URLs: /evento/<slug> is served from evento/<slug>/index.html, and
+		// /evento/<slug>/ redirects to the slash-less form, which is the canonical
+		// URL the prerender writes into each page.
+		"html_handling": "drop-trailing-slash",
+		// Only these paths reach the Worker; everything else is answered by the
+		// assets layer without invoking it. /data/* goes through the Worker so a
+		// missing file is a real 404 and not the SPA shell.
+		"run_worker_first": ["/api/*", "/data/*"]
+	},
+
+	// Auth database (users, sessions, saved events, rate-limit rows). Created
+	// with the EU jurisdiction: the rows are personal data (emails), and EU
+	// databases keep them stored and processed inside the EU.
+	"d1_databases": [
+		{
+			"binding": "AUTH_DB",
+			"database_name": "findleiria-auth",
+			"database_id": "999245fb-354b-472b-ab10-b00d88f3c009",
+			// Drizzle-generated SQL; `pnpm --filter @events-tracker/auth db:migrate:remote`.
+			"migrations_dir": "packages/auth/src/migrations"
+		}
+	],
+
+	// Verification mail (Cloudflare Email Sending; Workers Paid). The sender
+	// (MAIL_FROM) must be on a domain onboarded under Compute > Email Service >
+	// Email Sending, which needs Cloudflare DNS.
+	// Deliberately no `destination_address`, `allowed_destination_addresses` or
+	// `allowed_sender_addresses`: the mail goes to whoever signs up, and any of
+	// those would make send() throw E_RECIPIENT_NOT_ALLOWED for everyone else.
+	// Unrestricted means "any verified destination in the account"; keeping
+	// `from` on one address is MAIL_FROM's job.
+	// Local `wrangler dev` simulates this binding: nothing is delivered, the
+	// message is logged and its bodies saved to local files. Add `"remote": true`
+	// temporarily to send real mail from a local Worker (to test addresses only).
+	"send_email": [{ "name": "EMAIL" }],
+
+	// Custom events from POST /api/track.
+	"analytics_engine_datasets": [
+		{ "binding": "ANALYTICS", "dataset": "findleiria_events" }
+	],
+
+	// Secrets the Worker cannot run without. Wrangler checks them before it
+	// deploys or uploads a version (the failure names the missing ones), types
+	// them, and warns about them in `wrangler dev` (put them in .dev.vars).
+	// Values are never stored here.
+	// Side effect: `wrangler types` now declares NodeJS.ProcessEnv for these,
+	// so varlock skips its own ProcessEnv augmentation (two declarations clash);
+	// the env modules read schema-typed values through EnvSchemaAsStrings.
+	"secrets": {
+		"required": ["BETTER_AUTH_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]
+	},
+
+	"observability": { "enabled": true }
+}

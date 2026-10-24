@@ -20,6 +20,7 @@ test("renderOgCard produces a valid 1200x630 PNG with non-trivial size", async (
 			"Concerto de Verão no Jardim Público de Leiria com várias bandas e convidados especiais",
 		dayLabel: "12 set 2026",
 		venueLabel: "Jardim Público de Leiria",
+		host: "findleiria.example",
 	});
 
 	expect(Buffer.isBuffer(buf)).toBe(true);
@@ -45,4 +46,15 @@ test("renderOgCard handles very long titles and empty labels without failing", a
 		venueLabel: "",
 	});
 	expect(buf.length).toBeGreaterThan(1000);
+});
+
+test("the card prints the given host: another host is another image", async () => {
+	const card = { title: "Fado", dayLabel: "1 jan 2027", venueLabel: "Teatro" };
+	const a = await renderOgCard({ ...card, host: "findleiria.example" });
+	const b = await renderOgCard({ ...card, host: "other.example" });
+	const again = await renderOgCard({ ...card, host: "findleiria.example" });
+	expect(a.equals(again)).toBe(true);
+	expect(a.equals(b)).toBe(false);
+	// No host still renders (nothing printed on the right).
+	expect((await renderOgCard(card)).length).toBeGreaterThan(1000);
 });

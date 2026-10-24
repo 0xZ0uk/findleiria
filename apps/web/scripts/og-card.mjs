@@ -57,7 +57,13 @@ function displayFontSize(length) {
 	return 24;
 }
 
-export async function renderOgCard({ title, dayLabel, venueLabel }) {
+/**
+ * @param {object} input
+ * @param {string} input.host  the site host printed top right (the host of
+ *   SITE_URL); the prerender also hashes it into the cache key, so a card is
+ *   never reused across hosts
+ */
+export async function renderOgCard({ title, dayLabel, venueLabel, host }) {
 	// Some rows can have empty day/venue labels; fall back to safe text.
 	const day = dayLabel?.trim() ? dayLabel.trim() : "";
 	const venue = venueLabel?.trim() ? venueLabel.trim() : "Leiria";
@@ -99,7 +105,7 @@ export async function renderOgCard({ title, dayLabel, venueLabel }) {
 							{ type: "div", props: { style: {}, children: "findleiria" } },
 							{
 								type: "div",
-								props: { style: {}, children: "findleiria.vercel.app" },
+								props: { style: {}, children: host?.trim() ?? "" },
 							},
 						],
 					},
