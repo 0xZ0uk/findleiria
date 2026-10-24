@@ -5,28 +5,40 @@
 		".": {
 			"types": "./src/index.ts",
 			"bun": "./src/index.ts",
-			"default": "./dist/index.js"
+			"workerd": "./src/index.ts",
+			"default": "./src/index.ts"
 		},
 		"./*": {
 			"types": "./src/*.ts",
 			"bun": "./src/*.ts",
-			"default": "./dist/*.js"
+			"workerd": "./src/*.ts",
+			"default": "./src/*.ts"
 		}
 	},
 	"imports": {
-		"#libsql-client": {
-			"types": "./src/libsql-client.web.ts",
-			"bun": "./src/libsql-client.node.ts",
-			"default": "./dist/libsql-client.web.js"
+		"#auth-db": {
+			"types": "./src/auth-db.types.ts",
+			"workerd": "./src/auth-db.workerd.ts",
+			"bun": "./src/auth-db.node.ts",
+			"default": "./src/auth-db.workerd.ts"
+		},
+		"#mailer-transport": {
+			"types": "./src/mailer-transport.types.ts",
+			"workerd": "./src/mailer-transport.workerd.ts",
+			"bun": "./src/mailer-transport.node.ts",
+			"default": "./src/mailer-transport.workerd.ts"
 		}
 	},
 	"scripts": {
-		"build": "tsc -p tsconfig.build.json",
 		"env:check:production": "NODE_ENV=production varlock load",
 		"auth:generate": "varlock run -- auth generate --config ./src/auth.ts --output ./src/schema.ts --yes",
 		"db:push": "varlock run -- drizzle-kit push",
 		"db:generate": "varlock run -- drizzle-kit generate",
 		"db:migrate": "varlock run -- drizzle-kit migrate",
+		"db:migrate:local": "wrangler d1 migrations apply findleiria-auth --local --config ../../wrangler.jsonc",
+		"db:migrate:remote": "wrangler d1 migrations apply findleiria-auth --remote --config ../../wrangler.jsonc",
+		"db:export-d1": "bun src/export-to-d1.ts",
+		"db:verify-d1": "bun src/verify-d1-import.ts",
 		"db:studio": "varlock run -- drizzle-kit studio",
 		"test": "bun test",
 		"check-types": "tsc --noEmit"
@@ -40,13 +52,12 @@
 		"@libsql/client": "0.17.4",
 		"better-auth": "1.7.4",
 		"drizzle-orm": "^0.45.2",
-		"hono": "catalog:",
-		"nodemailer": "^10.2.1"
+		"hono": "catalog:"
 	},
 	"devDependencies": {
+		"@cloudflare/workers-types": "^5.20261024.1",
 		"@events-tracker/config": "workspace:*",
 		"@types/bun": "catalog:",
-		"@types/nodemailer": "^8.0.2",
 		"drizzle-kit": "^0.31.10",
 		"typescript": "catalog:",
 		"varlock": "^1.23.0"

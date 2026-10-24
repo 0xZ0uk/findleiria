@@ -15,14 +15,14 @@
 	"scripts": {
 		"check-types": "tsc --noEmit",
 		"test": "bun test",
-		"db:local": "turso dev --db-file local.db",
 		"db:push": "varlock run -- drizzle-kit push",
 		"db:generate": "varlock run -- drizzle-kit generate",
 		"db:migrate:deploy": "varlock run -- drizzle-kit migrate",
 		"db:seed": "varlock run -- bun run src/seed.ts",
 		"db:studio": "varlock run -- drizzle-kit studio",
 		"db:migrate": "varlock run -- drizzle-kit migrate",
-		"db:publish": "varlock run -- bun run src/publish-turso.ts"
+		"db:publish": "varlock run -- bun run src/publish-d1.ts",
+		"db:migrate:remote": "varlock run -- sh -c 'CLOUDFLARE_API_TOKEN=\"${CLOUDFLARE_API_TOKEN:-$D1_RW_API_TOKEN}\" wrangler d1 migrations apply findleiria-events --remote'"
 	},
 	"varlock": {
 		"loadPath": "../../",

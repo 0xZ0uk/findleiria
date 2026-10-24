@@ -1,8 +1,8 @@
 /**
  * The browser half of the saved-events API.
  *
- * All writes land on `/api/saved`, the single same-origin Vercel function that
- * holds the auth DB's write token. The browser sends/reads the session cookie
+ * All writes land on `/api/saved`, a same-origin route of the Worker, which alone
+ * holds the auth database (a D1 binding). The browser sends/reads the session cookie
  * with `credentials: "include"` and nothing else — no token ever ships to the
  * client. A non-OK response throws an `ApiError` carrying the HTTP status so
  * the hook can tell a dead session (401) from a broken request.

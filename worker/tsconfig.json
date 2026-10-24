@@ -1,0 +1,10 @@
+{
+	"extends": "@events-tracker/config/tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"types": ["@cloudflare/workers-types"]
+	},
+	"include": ["./**/*.ts", "../worker-configuration.d.ts"],
+	// Tests run on Bun (bun:test); tsconfig.test.json checks them with both type sets.
+	"exclude": ["./**/*.test.ts"]
+}

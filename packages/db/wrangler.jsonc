@@ -1,0 +1,17 @@
+// Wrangler config for the EVENTS database's migrations only (`db:migrate:remote`).
+// No Worker binds this database: the cron machine writes it over the D1 REST
+// API (`db:publish`) and the site's build reads it the same way (EVENTS_D1_ID
+// in the env is the same id).
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	"name": "findleiria-events-migrations",
+	"d1_databases": [
+		{
+			"binding": "EVENTS_DB",
+			"database_name": "findleiria-events",
+			"database_id": "4a50e1f6-6278-4e80-a3ad-5f9c924b21f1",
+			// The same drizzle-generated files local.db is migrated with.
+			"migrations_dir": "src/migrations"
+		}
+	]
+}

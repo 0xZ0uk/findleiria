@@ -38,6 +38,7 @@
 		"@types/react-dom": "catalog:",
 		"@varlock/vite-integration": "^1.5.4",
 		"@vitejs/plugin-react": "^6.0.4",
+		"aws4fetch": "^1.0.20",
 		"postcss": "^8.5.24",
 		"satori": "^0.33.4",
 		"tailwindcss": "catalog:",

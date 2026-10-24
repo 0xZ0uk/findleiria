@@ -79,7 +79,7 @@ export const api = {
 	/**
 	 * The whole agenda in one file: dated rows (a little wider than the window,
 	 * trimmed by `useAgenda` against the reader's clock), the undated
-	 * announcements and the masthead's stats.
+	 * announcements and the stats behind the fold's last-collection time.
 	 */
 	agenda: {
 		queryOptions: () =>

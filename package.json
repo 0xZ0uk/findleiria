@@ -9,9 +9,9 @@
 	"scripts": {
 		"dev": "turbo run dev",
 		"build": "turbo run build",
-		"check-types": "turbo run check-types",
-		"typecheck": "turbo run check-types",
-		"test": "turbo run test",
+		"check-types": "turbo run check-types && tsc --noEmit -p worker && tsc --noEmit -p worker/tsconfig.test.json",
+		"typecheck": "turbo run check-types && tsc --noEmit -p worker && tsc --noEmit -p worker/tsconfig.test.json",
+		"test": "turbo run test && bun test worker",
 		"lint": "biome ci --error-on-warnings .",
 		"dev:web": "turbo run dev -F web --",
 		"dev:server": "turbo run dev -F server --",
@@ -19,11 +19,15 @@
 		"db:studio": "turbo run db:studio -F @events-tracker/db --",
 		"db:generate": "turbo run db:generate -F @events-tracker/db --",
 		"db:migrate": "turbo run db:migrate -F @events-tracker/db --",
-		"db:local": "turbo run db:local -F @events-tracker/db --",
 		"db:seed": "turbo run db:seed -F @events-tracker/db --",
 		"check": "biome check --write .",
 		"db:publish": "turbo run db:publish --filter @events-tracker/db",
-		"env:check": "varlock load"
+		"db:migrate:remote": "turbo run db:migrate:remote -F @events-tracker/db --",
+		"env:check": "varlock load",
+		"cf:types": "wrangler types --include-runtime false",
+		"cf:build": "pnpm --filter web build",
+		"cf:deploy": "wrangler deploy",
+		"cf:preview": "wrangler versions upload"
 	},
 	"dependencies": {
 		"@events-tracker/auth": "workspace:*",
@@ -31,11 +35,13 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.11",
+		"@cloudflare/workers-types": "^5.20261024.1",
 		"@events-tracker/config": "workspace:*",
 		"@types/bun": "catalog:",
 		"turbo": "^2.10.12",
 		"typescript": "catalog:",
-		"varlock": "^1.23.0"
+		"varlock": "^1.23.0",
+		"wrangler": "^4.152.0"
 	},
 	"packageManager": "pnpm@10.34.4"
 }

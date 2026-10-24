@@ -44,10 +44,10 @@ const guardWrites = createMiddleware(async (c, next) => {
  * `GET`/`POST /api/saved` — the reader's saved events, on the same origin as
  * the app so the session cookie is a first-party cookie.
  *
- * Written once and mounted by the Vercel function and the dev server, exactly
- * like `authRoutes`. The unsave is a `POST` body flag, not a `DELETE` route, so
- * Vercel's `/api` param expansion (which only matches one segment) needs no
- * rewrite.
+ * Written once and mounted by the Worker and the dev server, exactly like
+ * `authRoutes`. The unsave is a `POST` body flag, not a `DELETE` route, so the
+ * one path `/api/saved` covers both writes and the Worker needs no per-slug
+ * routing.
  */
 export const savedRoutes = new Hono()
 

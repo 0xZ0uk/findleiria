@@ -15,7 +15,7 @@ import { lisbonDay } from "./scraper/fingerprint";
  *
  * Writes the database the other server CLIs use (DATABASE_URL, i.e. local.db).
  * A pick reaches the site with the next `db:publish`, which mirrors every
- * column to Turso, and the Vercel rebuild that follows it.
+ * column to Cloudflare D1, and the site rebuild that follows it.
  */
 
 export interface Pick {

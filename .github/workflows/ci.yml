@@ -56,6 +56,32 @@ jobs:
       - name: Test
         run: pnpm exec turbo run test --concurrency=2 --ui=stream
 
+      # The Worker is outside turbo's workspaces, so the turbo steps above do not
+      # cover it; these are the same checks the root `typecheck` and `test` run.
+      - name: Typecheck and test the Worker
+        run: |
+          pnpm exec tsc --noEmit -p worker
+          pnpm exec tsc --noEmit -p worker/tsconfig.test.json
+          bun test worker
+
+      # Binding or config drift fails the PR: the committed
+      # worker-configuration.d.ts must be what `wrangler types` generates from
+      # wrangler.jsonc.
+      - name: Worker types are up to date
+        run: |
+          pnpm cf:types
+          git diff --exit-code -- worker-configuration.d.ts
+
+      # Bundles the Worker and validates wrangler.jsonc without deploying or
+      # authenticating. The assets directory must exist; the real web build
+      # needs D1 and R2 secrets that PR CI does not have, so a stub stands in.
+      - name: Worker bundles (wrangler deploy --dry-run)
+        run: |
+          mkdir -p apps/web/dist
+          echo '<!doctype html><title>ci</title>' > apps/web/dist/index.html
+          pnpm exec wrangler deploy --dry-run --outdir /tmp/worker-dist
+
       # `vite build` is deliberately not run here: the web build prerenders
-      # event pages from the Turso snapshot, which needs a database and
-      # secrets that PR CI does not have. Vercel builds and deploys.
+      # event pages from the D1 snapshot, which needs a database token and
+      # secrets that PR CI does not have. Workers Builds builds and deploys
+      # (settings in the header of wrangler.jsonc).

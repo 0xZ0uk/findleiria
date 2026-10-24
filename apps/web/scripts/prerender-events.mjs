@@ -5,27 +5,32 @@
 // the dev API uses (packages/api/src/snapshot.ts).
 //
 // Run from apps/web AFTER `vite build`:  node scripts/prerender-events.mjs
-// Env: TURSO_DATABASE_URL + TURSO_AUTH_TOKEN (read-only; never VITE_-prefixed).
+// Env: SITE_URL (the public origin, required), plus CLOUDFLARE_ACCOUNT_ID +
+// EVENTS_D1_ID + D1_READ_API_TOKEN (read-only; never VITE_-prefixed), or a
+// `file:` SNAPSHOT_DATABASE_URL for a local build.
 
 import fs from "node:fs";
 import path from "node:path";
-import { buildCards, templateFingerprint } from "./og-cache.mjs";
+import { buildCards, liveCardKeys, templateFingerprint } from "./og-cache.mjs";
 import { OG_TEMPLATE_FILES, renderOgCard } from "./og-card.mjs";
+import { createR2Cache, formatR2Stats } from "./og-r2.mjs";
 import {
 	APP_DIR,
-	buildCredentials,
+	buildSource,
+	bundleNeedles,
+	closeSnapshotDb,
 	loadSnapshotBuilder,
-	remoteHost,
+	openSnapshotDb,
+	siteOrigin,
 } from "./snapshot-lib.mjs";
 
 const DIST = path.join(APP_DIR, "dist");
 const DATA = path.join(DIST, "data");
-const SITE = "https://findleiria.vercel.app";
 const LISBON_TZ = "Europe/Lisbon";
-// Rendered OG cards, keyed by content (see og-cache.mjs). Lives under
-// node_modules because Vercel restores node_modules/** between builds (the
-// build cache is per project and git branch, retained one month); a missing or
-// empty directory is simply a cold build that renders every card.
+// Rendered OG cards, keyed by content (see og-cache.mjs). Between builds they
+// persist in an R2 bucket (og-r2.mjs); this directory is the local working copy
+// (under node_modules). A missing or empty directory with no R2 config is
+// simply a cold build that renders every card.
 const OG_CACHE_DIR = path.join(APP_DIR, "node_modules", ".cache", "og-cards");
 const OG_CONCURRENCY = 4;
 
@@ -61,16 +66,14 @@ function assertSnapshotOnDisk(snapshot) {
 }
 
 // ---------------------------------------------------- client bundle leak guard
-// The bundle used to carry the Turso URL and token. Nothing in it may talk to
-// the database now: fail the build if the database host or a libSQL client
-// shows up in any chunk.
-function assertBundleHasNoDatabase(dbUrl) {
+// The SPA reads the static snapshot and never the database: fail the build if the D1 database id, the read token, the
+// Cloudflare API path or a libSQL client shows up in any chunk.
+function assertBundleHasNoDatabase(source) {
 	const assetsDir = path.join(DIST, "assets");
 	if (!fs.existsSync(assetsDir)) {
 		throw new Error(`Missing ${assetsDir} — run this after vite build.`);
 	}
-	const host = remoteHost(dbUrl);
-	const needles = ["libsql", "VITE_TURSO", ...(host ? [host] : [])];
+	const needles = bundleNeedles(source);
 	for (const file of fs
 		.readdirSync(assetsDir)
 		.filter((f) => f.endsWith(".js"))) {
@@ -221,7 +224,7 @@ function lisbonDayLabel(epochSeconds) {
 
 // ---------------------------------------------------------------- JSON-LD
 // `row` is one `eventDirectory` row (packages/api/src/queries/events.ts).
-function buildJsonLd(row) {
+function buildJsonLd(row, SITE) {
 	// No parseable machine date => no Event JSON-LD at all.
 	if (row.dateText) return null;
 
@@ -279,12 +282,18 @@ function buildJsonLd(row) {
 // ---------------------------------------------------------------- main
 async function main() {
 	const t0 = Date.now();
-	const { url: dbUrl, token } = buildCredentials();
-	assertBundleHasNoDatabase(dbUrl);
+	// Before any database read: a build without its public origin is a wrong
+	// build (canonical URLs, sitemap), so stop early.
+	const { origin: SITE, host: SITE_HOST } = siteOrigin();
+	const source = buildSource();
+	assertBundleHasNoDatabase(source);
 
-	const { buildSnapshot, writeSnapshot, createReadDb, EMBEDDED_EVENT_ID } =
-		await loadSnapshotBuilder();
-	const db = createReadDb(dbUrl, token);
+	const builder = await loadSnapshotBuilder();
+	const { buildSnapshot, writeSnapshot, EMBEDDED_EVENT_ID } = builder;
+	console.log(
+		`[prerender] snapshot source: ${source.kind === "d1" ? "Cloudflare D1 (REST, read-only)" : source.url}`,
+	);
+	const db = openSnapshotDb(builder, source);
 	let snapshot;
 	try {
 		snapshot = await buildSnapshot(db);
@@ -292,7 +301,7 @@ async function main() {
 		console.error("[prerender] database read FAILED:", err);
 		process.exit(1);
 	} finally {
-		db.$client.close();
+		closeSnapshotDb(db);
 	}
 
 	// Every event, newest first, with its description: pages, cards, sitemap.
@@ -357,14 +366,23 @@ async function main() {
 	if (cardEntries.some((entry) => !entry.slug)) {
 		throw new Error("Row with empty slug encountered.");
 	}
+	const fingerprint = templateFingerprint(OG_TEMPLATE_FILES, SITE_HOST);
+	const liveKeys = liveCardKeys(cardEntries, fingerprint);
+	// Remote cache: fetch what this build needs, render the rest, then upload the
+	// new cards and drop the unused ones. Never fails the build (og-r2.mjs).
+	const r2 = createR2Cache({ cacheDir: OG_CACHE_DIR });
+	await r2.pull(liveKeys);
 	const cardStats = await buildCards({
 		entries: cardEntries,
 		cacheDir: OG_CACHE_DIR,
 		outDir: path.join(DIST, "og"),
-		fingerprint: templateFingerprint(OG_TEMPLATE_FILES),
-		render: renderOgCard,
+		fingerprint,
+		render: (card) => renderOgCard({ ...card, host: SITE_HOST }),
 		concurrency: OG_CONCURRENCY,
 	});
+	await r2.push(cardStats.renderedKeys);
+	await r2.prune(liveKeys);
+	if (r2.enabled) console.log(formatR2Stats(r2.stats));
 	console.log(
 		`[prerender] og cards: ${cardStats.rendered} rendered, ${cardStats.reused} from cache, ${cardStats.evicted} evicted`,
 	);
@@ -379,7 +397,7 @@ async function main() {
 		const descText = row.description ? decodeEntities(row.description) : "";
 
 		// ---- per-event HTML page
-		const jsonLd = buildJsonLd(row);
+		const jsonLd = buildJsonLd(row, SITE);
 		const pageUrl = `${SITE}/evento/${slug}`;
 		const ogImageUrl = `${SITE}/og/${slug}.png`;
 

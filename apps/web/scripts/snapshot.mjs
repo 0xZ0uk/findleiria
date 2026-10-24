@@ -12,6 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
 	APP_DIR,
+	closeSnapshotDb,
 	devDatabaseUrl,
 	isLocalUrl,
 	loadSnapshotBuilder,
@@ -39,7 +40,7 @@ async function main() {
 				`(${(written.bytes / 1024).toFixed(0)} KB)`,
 		);
 	} finally {
-		db.$client.close();
+		closeSnapshotDb(db);
 	}
 }
 

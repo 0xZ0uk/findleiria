@@ -74,8 +74,8 @@ export const account = sqliteTable(
 /**
  * A reader's saved event, keyed by user and event slug.
  *
- * Lives in the auth database on purpose: the events DB is mirrored to a Turso
- * token baked into the browser bundle, so user data can never land there. The
+ * Lives in the auth database on purpose: the events DB is mirrored to D1 and
+ * published as a public static snapshot, so user data can never land there. The
  * unique (user, slug) pair makes `saveEvent` idempotent — saving twice stays
  * one row — and the slug alone keeps the row hydratable after the event passes.
  */
