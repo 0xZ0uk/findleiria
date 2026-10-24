@@ -18,16 +18,18 @@ export const DAY = 86_400;
 export const NOW_MS = Date.UTC(2026, 9, 24, 12, 0, 0);
 export const NOW = NOW_MS / 1000;
 
-export type TestDb = { db: Db; cleanup: () => void };
+export type TestDb = { db: Db; path: string; cleanup: () => void };
 
 export async function createTestDb(
 	prefix = "findleiria-test-",
 ): Promise<TestDb> {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-	const db = createReadDb(`file:${path.join(dir, "test.db")}`);
+	const file = path.join(dir, "test.db");
+	const db = createReadDb(`file:${file}`);
 	await migrate(db, { migrationsFolder: MIGRATIONS });
 	return {
 		db,
+		path: file,
 		cleanup: () => {
 			db.$client.close();
 			fs.rmSync(dir, { recursive: true, force: true });

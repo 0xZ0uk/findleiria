@@ -8,6 +8,7 @@ import {
 	type D1Query,
 	parseD1Response,
 } from "./d1-rest";
+import { fakeD1 } from "./fake-d1";
 import { INDEX_QUERY, PUBLISHED_TABLES } from "./publish-lib";
 import { migratedDb } from "./test-support";
 
@@ -18,126 +19,6 @@ import { migratedDb } from "./test-support";
  * as one transaction (any failing statement rolls the request back), errors
  * are HTTP 400 `{ success: false, errors: [{ code: 7500, … }] }`.
  */
-
-/** Split on `;` outside quotes/comments, as D1 does server-side. */
-function splitStatements(sql: string): string[] {
-	const out: string[] = [];
-	let cur = "";
-	let quote: string | null = null;
-	for (let i = 0; i < sql.length; i++) {
-		const c = sql[i] as string;
-		if (quote) {
-			cur += c;
-			if (c === quote) {
-				if (sql[i + 1] === quote) cur += sql[++i];
-				else quote = null;
-			}
-		} else if (c === "'" || c === '"' || c === "`") {
-			quote = c;
-			cur += c;
-		} else if (c === ";") {
-			if (cur.trim()) out.push(cur.trim());
-			cur = "";
-		} else {
-			cur += c;
-		}
-	}
-	if (cur.trim()) out.push(cur.trim());
-	return out;
-}
-
-type Fault = (statement: string, request: number) => boolean;
-
-function fakeD1() {
-	let remote = freshRemote();
-	let fault: Fault | null = null;
-	let requests = 0;
-	const sqlLog: string[] = [];
-	const server = Bun.serve({
-		port: 0,
-		async fetch(req) {
-			const url = new URL(req.url);
-			if (
-				req.headers.get("authorization") !== "Bearer test-token" ||
-				!url.pathname.endsWith("/accounts/acc/d1/database/db-id/query")
-			) {
-				return Response.json(
-					{ success: false, errors: [{ code: 10000, message: "auth" }] },
-					{ status: 403 },
-				);
-			}
-			const { sql } = (await req.json()) as { sql: string };
-			const request = ++requests;
-			sqlLog.push(sql);
-			try {
-				const run = remote.transaction(() =>
-					splitStatements(sql).map((statement) => {
-						if (fault?.(statement, request)) {
-							throw new Error(`injected failure at request ${request}`);
-						}
-						const q = remote.query(statement);
-						const results = q.all() as Record<string, unknown>[];
-						const changes = remote
-							.query<{ n: number }, []>("SELECT changes() AS n")
-							.get()?.n;
-						return {
-							results,
-							success: true,
-							meta: { rows_written: changes ?? 0 },
-						};
-					}),
-				);
-				return Response.json({
-					success: true,
-					errors: [],
-					messages: [],
-					result: run(),
-				});
-			} catch (err) {
-				return Response.json(
-					{
-						success: false,
-						errors: [{ code: 7500, message: String(err) }],
-						messages: [],
-					},
-					{ status: 400 },
-				);
-			}
-		},
-	});
-	const baseUrl = `http://localhost:${server.port}`;
-	const d1 = createD1Query({
-		accountId: "acc",
-		databaseId: "db-id",
-		token: "test-token",
-		baseUrl,
-	});
-	return {
-		d1,
-		baseUrl,
-		get remote() {
-			return remote;
-		},
-		reset() {
-			remote = freshRemote();
-			fault = null;
-			sqlLog.length = 0;
-		},
-		setFault(f: Fault | null) {
-			fault = f;
-		},
-		sqlLog,
-		stop: () => server.stop(true),
-	};
-}
-
-/** What D1 looks like after `wrangler d1 migrations apply`. */
-function freshRemote(): Database {
-	const db = migratedDb({ foreignKeys: true });
-	db.run("CREATE TABLE _cf_KV (key TEXT PRIMARY KEY, value BLOB)");
-	db.run("CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY, name TEXT)");
-	return db;
-}
 
 /** A migrated local.db with realistic, awkward data. */
 function seededLocal(generation: number, events = 300): Database {
