@@ -36,6 +36,13 @@
       "when": 1792843708659,
       "tag": "0004_scrape_run_outcome",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1792863610476,
+      "tag": "0005_parallel_mandroid",
+      "breakpoints": true
     }
   ]
 }

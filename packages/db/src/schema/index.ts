@@ -61,6 +61,18 @@ export const events = sqliteTable(
 		 * views exclude the row.
 		 */
 		date_text: text("date_text"),
+		/**
+		 * Free entry: true = free, false = paid, null = unknown. Only set when a
+		 * source says so (never guessed); ingest never lets a null overwrite a
+		 * known value.
+		 */
+		is_free: integer("is_free", { mode: "boolean" }),
+		/**
+		 * Epoch seconds (UTC) when the event was hand-picked as a "week's pick".
+		 * Non-null ⇒ curated pick. Set and cleared only by `src/feature.ts`;
+		 * ingest and the scrapers never write it.
+		 */
+		featured_at: integer("featured_at"),
 		/** Deduplication fingerprint (e.g. hash of source + source event id). */
 		fingerprint: text("fingerprint").notNull().unique(),
 		/** Epoch seconds (UTC). */
